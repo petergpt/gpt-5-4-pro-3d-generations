@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Golden Gate Sprint</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --hud-background: rgba(7, 12, 18, 0.42);
+      --hud-border: rgba(255, 255, 255, 0.12);
+      --hud-text: #f2f7fb;
+      --hud-accent: #7fe3ff;
+      --hud-shadow: rgba(0, 0, 0, 0.28);
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #02050a;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      position: relative;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #hud {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      min-width: 148px;
+      padding: 10px 12px 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--hud-border);
+      background: var(--hud-background);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 12px 40px var(--hud-shadow);
+      color: var(--hud-text);
+      pointer-events: none;
+      user-select: none;
+      transition: opacity 0.18s ease, transform 0.18s ease, background 0.18s ease;
+    }
+
+    #hud.collapsed {
+      min-width: 0;
+      padding: 0;
+      border-color: transparent;
+      background: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+    }
+
+    #hudToggle {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 24px;
+      height: 24px;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--hud-text);
+      font: inherit;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: background 0.16s ease, transform 0.16s ease;
+    }
+
+    #hudToggle:hover {
+      background: rgba(255, 255, 255, 0.16);
+      transform: translateY(-1px);
+    }
+
+    #hud.collapsed #hudToggle {
+      position: static;
+      margin: 0;
+    }
+
+    #hudRows {
+      display: grid;
+      gap: 6px;
+      padding-right: 18px;
+    }
+
+    #hud.collapsed #hudRows {
+      display: none;
+    }
+
+    .hudRow {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 18px;
+      min-width: 128px;
+    }
+
+    .hudLabel {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      opacity: 0.64;
+    }
+
+    .hudValue {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-variant-numeric: tabular-nums;
+      color: var(--hud-accent);
+      text-shadow: 0 0 12px rgba(127, 227, 255, 0.16);
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="hud" aria-live="polite">
+    <button id="hudToggle" aria-label="Collapse HUD">–</button>
+    <div id="hudRows">
+      <div class="hudRow"><span class="hudLabel">Timer</span><span class="hudValue" id="timerValue">15.0</span></div>
+      <div class="hudRow"><span class="hudLabel">Score</span><span class="hudValue" id="scoreValue">0</span></div>
+      <div class="hudRow"><span class="hudLabel">Combo</span><span class="hudValue" id="comboValue">x0</span></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    const sceneConfig = {
+      roadSurfaceY: 18,
+      roadHalfWidth: 13.8,
+      roadLength: 4200,
+      roadStartZ: -260,
+      playerWidth: 2.25,
+      playerLength: 4.6,
+      runDurationSeconds: 15,
+      baseSpeed: 235,
+      brakingSpeed: 132,
+      boostedSpeed: 328,
+      minimumRecoverySpeed: 118,
+      lanePositions: [-10.2, -6.1, -2.0, 2.0, 6.1, 10.2],
+      towerZPositions: [320, 1710],
+      towerZoneHalfLength: 72,
+      gateZPositions: [440, 670, 915, 1160, 1390, 1625, 1870, 2125, 2400, 2690, 3020],
+      initialPlayerX: 6.1,
+      initialPlayerZ: 272,
+      maxTrafficCount: 96,
+      minTrafficCount: 38,
+      fpsFloor: 55,
+      fpsCeiling: 60
+    };
+
+    const trafficPalette = [
+      0xf3f7fb,
+      0xc7d4e3,
+      0x7ec5d4,
+      0xffd166,
+      0xf28482,
+      0xb8c0ff,
+      0x9bc995,
+      0xffef9f,
+      0xd0d8e8
+    ];
+
+    const keyControlSet = new Set([
+      'ArrowLeft',
+      'ArrowRight',
+      'ArrowDown',
+      'KeyA',
+      'KeyD',
+      'KeyS',
+      'ShiftLeft',
+      'ShiftRight',
+      'Space',
+      'KeyC'
+    ]);
+
+    const hudElement = document.getElementById('hud');
+    const hudToggleButton = document.getElementById('hudToggle');
+    const timerValueElement = document.getElementById('timerValue');
+    const scoreValueElement = document.getElementById('scoreValue');
+    const comboValueElement = document.getElementById('comboValue');
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: false,
+      powerPreference: 'high-performance'
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    renderer.sortObjects = true;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x9fbfd8);
+    scene.fog = new THREE.Fog(0x8baac2, 260, 2400);
+
+    const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.1, 5000);
+    camera.position.set(0, 28, 220);
+
+    const hemisphereLight = new THREE.HemisphereLight(0xe8f4ff, 0x193048, 1.16);
+    scene.add(hemisphereLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfff3dd, 1.25);
+    sunLight.position.set(-180, 220, -420);
+    scene.add(sunLight);
+
+    const worldGroup = new THREE.Group();
+    scene.add(worldGroup);
+
+    const chaseCameraPosition = new THREE.Vector3();
+    const chaseLookPosition = new THREE.Vector3();
+    const hoodCameraPosition = new THREE.Vector3();
+    const hoodLookPosition = new THREE.Vector3();
+    const temporaryColor = new THREE.Color();
+    const comboColorStart = new THREE.Color(0x7fe3ff);
+    const comboColorEnd = new THREE.Color(0xffd166);
+    const comboColorScratch = new THREE.Color();
+    const fogColorStart = new THREE.Color(0x8baac2);
+    const fogColorEnd = new THREE.Color(0x86b7d8);
+    const fogColorScratch = new THREE.Color();
+
+    const inputState = {
+      steerLeftPressed: false,
+      steerRightPressed: false,
+      brakePressed: false,
+      boostPressed: false
+    };
+
+    const gameState = {
+      cameraMode: 'chase',
+      playerX: sceneConfig.initialPlayerX,
+      playerZ: sceneConfig.initialPlayerZ,
+      playerSpeed: sceneConfig.baseSpeed,
+      playerRoll: 0,
+      lateralVelocity: 0,
+      boostCharge: 0.42,
+      boostActive: false,
+      comboValue: 0,
+      comboHoldTimer: 0,
+      comboDecayTimer: 0,
+      distanceScore: 0,
+      chainScore: 0,
+      towerBonusScore: 0,
+      displayedScore: 0,
+      timeRemaining: sceneConfig.runDurationSeconds,
+      collisionRecoveryTimer: 0,
+      endingTimer: 0,
+      activeTrafficCount: 72,
+      trafficCountCap: 72,
+      fpsAccumulatorSeconds: 0,
+      fpsAccumulatorFrames: 0,
+      smoothedFps: 60,
+      pulseKick: 0,
+      crashKick: 0,
+      towerKick: 0
+    };
+
+    const roadState = createBridgeAndEnvironment(worldGroup);
+    const playerState = createPlayerCar(worldGroup);
+    const pulseState = createPulsePool(worldGroup);
+    const trafficState = createTrafficSystem(worldGroup);
+    const boostGateState = createBoostGateCollection(worldGroup);
+    const towerPassState = sceneConfig.towerZPositions.map((towerZPositionValue) => ({
+      towerZPositionValue,
+      hasEnteredZone: false,
+      bonusAwarded: false,
+      cleanWindowOpen: true
+    }));
+
+    const animationClock = new THREE.Clock();
+
+    updateTrafficCapFromViewport();
+    resetRun(true);
+    updateHud();
+
+    hudToggleButton.addEventListener('click', () => {
+      const nextCollapsedState = !hudElement.classList.contains('collapsed');
+      hudElement.classList.toggle('collapsed', nextCollapsedState);
+      hudToggleButton.textContent = nextCollapsedState ? '+' : '–';
+      hudToggleButton.setAttribute('aria-label', nextCollapsedState ? 'Expand HUD' : 'Collapse HUD');
+    });
+
+    window.addEventListener('keydown', (keyboardEvent) => {
+      if (keyControlSet.has(keyboardEvent.code)) {
+        keyboardEvent.preventDefault();
+      }
+
+      if (keyboardEvent.repeat && keyboardEvent.code === 'KeyC') {
+        return;
+      }
+
+      if (keyboardEvent.code === 'ArrowLeft' || keyboardEvent.code === 'KeyA') {
+        inputState.steerLeftPressed = true;
+      }
+
+      if (keyboardEvent.code === 'ArrowRight' || keyboardEvent.code === 'KeyD') {
+        inputState.steerRightPressed = true;
+      }
+
+      if (keyboardEvent.code === 'ArrowDown' || keyboardEvent.code === 'KeyS') {
+        inputState.brakePressed = true;
+      }
+
+      if (keyboardEvent.code === 'ShiftLeft' || keyboardEvent.code === 'ShiftRight' || keyboardEvent.code === 'Space') {
+        inputState.boostPressed = true;
+      }
+
+      if (keyboardEvent.code === 'KeyC' && !keyboardEvent.repeat) {
+        gameState.cameraMode = gameState.cameraMode === 'chase' ? 'hood' : 'chase';
+      }
+    }, { passive: false });
+
+    window.addEventListener('keyup', (keyboardEvent) => {
+      if (keyControlSet.has(keyboardEvent.code)) {
+        keyboardEvent.preventDefault();
+      }
+
+      if (keyboardEvent.code === 'ArrowLeft' || keyboardEvent.code === 'KeyA') {
+        inputState.steerLeftPressed = false;
+      }
+
+      if (keyboardEvent.code === 'ArrowRight' || keyboardEvent.code === 'KeyD') {
+        inputState.steerRightPressed = false;
+      }
+
+      if (keyboardEvent.code === 'ArrowDown' || keyboardEvent.code === 'KeyS') {
+        inputState.brakePressed = false;
+      }
+
+      if (keyboardEvent.code === 'ShiftLeft' || keyboardEvent.code === 'ShiftRight' || keyboardEvent.code === 'Space') {
+        inputState.boostPressed = false;
+      }
+    }, { passive: false });
+
+    window.addEventListener('blur', () => {
+      inputState.steerLeftPressed = false;
+      inputState.steerRightPressed = false;
+      inputState.brakePressed = false;
+      inputState.boostPressed = false;
+    });
+
+    window.addEventListener('resize', () => {
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      updateTrafficCapFromViewport();
+    });
+
+    renderer.domElement.addEventListener('contextmenu', (pointerEvent) => {
+      pointerEvent.preventDefault();
+    });
+
+    requestAnimationFrame(renderFrame);
+
+    function renderFrame() {
+      const deltaSeconds = Math.min(animationClock.getDelta(), 0.05);
+      const elapsedSeconds = animationClock.elapsedTime;
+      const simulationStepCount = Math.max(1, Math.ceil(deltaSeconds / 0.01));
+      const simulationDeltaSeconds = deltaSeconds / simulationStepCount;
+
+      updatePerformanceBudget(deltaSeconds);
+      updateWaterAnimation(roadState, elapsedSeconds);
+
+      for (let simulationStepIndex = 0; simulationStepIndex < simulationStepCount; simulationStepIndex += 1) {
+        updatePlayerState(simulationDeltaSeconds);
+        updateTrafficState(simulationDeltaSeconds);
+        updateBoostGateState(simulationDeltaSeconds, elapsedSeconds);
+        updateTowerPasses();
+        updatePulsePool(simulationDeltaSeconds);
+      }
+
+      updateVisualStyle(deltaSeconds);
+      updateCamera(deltaSeconds);
+      updateHud();
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(renderFrame);
+    }
+
+    function createBridgeAndEnvironment(parentGroup) {
+      const environmentGroup = new THREE.Group();
+      parentGroup.add(environmentGroup);
+
+      const skyGeometry = new THREE.SphereGeometry(3200, 48, 28);
+      const skyMaterial = new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        uniforms: {
+          topColor: { value: new THREE.Color(0x3d76aa) },
+          horizonColor: { value: new THREE.Color(0xf1d2ab) },
+          lowerColor: { value: new THREE.Color(0x8cb7cf) },
+          sunColor: { value: new THREE.Color(0xfff0d9) },
+          sunDirection: { value: new THREE.Vector3(-0.28, 0.2, -0.94).normalize() }
+        },
+        vertexShader: `
+          varying vec3 vWorldPosition;
+          void main() {
+            vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+            vWorldPosition = worldPosition.xyz;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 topColor;
+          uniform vec3 horizonColor;
+          uniform vec3 lowerColor;
+          uniform vec3 sunColor;
+          uniform vec3 sunDirection;
+          varying vec3 vWorldPosition;
+          void main() {
+            vec3 direction = normalize(vWorldPosition);
+            float horizonMix = smoothstep(-0.12, 0.3, direction.y);
+            float zenithMix = smoothstep(0.12, 0.88, direction.y);
+            vec3 skyColor = mix(lowerColor, horizonColor, horizonMix);
+            skyColor = mix(skyColor, topColor, zenithMix);
+            float sunAmount = pow(max(dot(direction, normalize(sunDirection)), 0.0), 130.0);
+            float glowAmount = pow(max(dot(direction, normalize(sunDirection)), 0.0), 10.0);
+            skyColor += sunColor * sunAmount * 1.2;
+            skyColor += sunColor * glowAmount * 0.08;
+            gl_FragColor = vec4(skyColor, 1.0);
+          }
+        `
+      });
+      const skyMesh = new THREE.Mesh(skyGeometry, skyMaterial);
+      environmentGroup.add(skyMesh);
+
+      const waterTexture = createWaterTexture();
+      waterTexture.wrapS = THREE.RepeatWrapping;
+      waterTexture.wrapT = THREE.RepeatWrapping;
+      waterTexture.repeat.set(18, 52);
+
+      const waterGeometry = new THREE.PlaneGeometry(2600, 5600, 1, 1);
+      const waterMaterial = new THREE.MeshPhongMaterial({
+        color: 0x2b5577,
+        map: waterTexture,
+        transparent: true,
+        opacity: 0.97,
+        shininess: 88,
+        specular: new THREE.Color(0x8bc0d8)
+      });
+      const waterMesh = new THREE.Mesh(waterGeometry, waterMaterial);
+      waterMesh.rotation.x = -Math.PI * 0.5;
+      waterMesh.position.set(0, -0.6, 1760);
+      environmentGroup.add(waterMesh);
+
+      const distantLandMaterial = new THREE.MeshBasicMaterial({ color: 0x3f5e76, transparent: true, opacity: 0.9 });
+      const leftRidgelineMesh = createRidgelineMesh(-1, distantLandMaterial);
+      const rightRidgelineMesh = createRidgelineMesh(1, distantLandMaterial);
+      environmentGroup.add(leftRidgelineMesh, rightRidgelineMesh);
+
+      const bridgeDeckMaterial = new THREE.MeshStandardMaterial({ color: 0x4f535a, metalness: 0.2, roughness: 0.9 });
+      const deckGeometry = new THREE.BoxGeometry(sceneConfig.roadHalfWidth * 2 + 4.2, 2.6, sceneConfig.roadLength);
+      const deckMesh = new THREE.Mesh(deckGeometry, bridgeDeckMaterial);
+      deckMesh.position.set(0, sceneConfig.roadSurfaceY - 1.4, sceneConfig.roadLength * 0.5 + sceneConfig.roadStartZ * 0.5);
+      environmentGroup.add(deckMesh);
+
+      const roadSurfaceMaterial = new THREE.MeshStandardMaterial({ color: 0x202733, metalness: 0.08, roughness: 0.96 });
+      const roadSurfaceGeometry = new THREE.BoxGeometry(sceneConfig.roadHalfWidth * 2, 0.28, sceneConfig.roadLength);
+      const roadSurfaceMesh = new THREE.Mesh(roadSurfaceGeometry, roadSurfaceMaterial);
+      roadSurfaceMesh.position.set(0, sceneConfig.roadSurfaceY + 0.14, sceneConfig.roadLength * 0.5 + sceneConfig.roadStartZ * 0.5);
+      environmentGroup.add(roadSurfaceMesh);
+
+      const bridgeOrangeMaterial = new THREE.MeshStandardMaterial({
+        color: 0xd45d2a,
+        emissive: new THREE.Color(0x50240e),
+        emissiveIntensity: 0.28,
+        metalness: 0.2,
+        roughness: 0.76
+      });
+
+      const railGeometry = new THREE.BoxGeometry(0.42, 1.0, sceneConfig.roadLength);
+      const leftRailMesh = new THREE.Mesh(railGeometry, bridgeOrangeMaterial);
+      leftRailMesh.position.set(-sceneConfig.roadHalfWidth - 1.12, sceneConfig.roadSurfaceY + 1.16, sceneConfig.roadLength * 0.5 + sceneConfig.roadStartZ * 0.5);
+      environmentGroup.add(leftRailMesh);
+
+      const rightRailMesh = new THREE.Mesh(railGeometry, bridgeOrangeMaterial);
+      rightRailMesh.position.set(sceneConfig.roadHalfWidth + 1.12, sceneConfig.roadSurfaceY + 1.16, sceneConfig.roadLength * 0.5 + sceneConfig.roadStartZ * 0.5);
+      environmentGroup.add(rightRailMesh);
+
+      const trussGeometry = new THREE.BoxGeometry(0.7, 0.4, sceneConfig.roadLength);
+      const leftTrussMesh = new THREE.Mesh(trussGeometry, bridgeOrangeMaterial);
+      leftTrussMesh.position.set(-sceneConfig.roadHalfWidth - 1.56, sceneConfig.roadSurfaceY - 0.46, sceneConfig.roadLength * 0.5 + sceneConfig.roadStartZ * 0.5);
+      environmentGroup.add(leftTrussMesh);
+
+      const rightTrussMesh = new THREE.Mesh(trussGeometry, bridgeOrangeMaterial);
+      rightTrussMesh.position.set(sceneConfig.roadHalfWidth + 1.56, sceneConfig.roadSurfaceY - 0.46, sceneConfig.roadLength * 0.5 + sceneConfig.roadStartZ * 0.5);
+      environmentGroup.add(rightTrussMesh);
+
+      const edgeGlowMaterial = new THREE.MeshBasicMaterial({ color: 0x91dfff, transparent: true, opacity: 0.4, depthWrite: false });
+      const edgeGlowGeometry = new THREE.BoxGeometry(0.18, 0.02, sceneConfig.roadLength);
+      const leftGlowMesh = new THREE.Mesh(edgeGlowGeometry, edgeGlowMaterial);
+      leftGlowMesh.position.set(-sceneConfig.roadHalfWidth + 0.38, sceneConfig.roadSurfaceY + 0.23, sceneConfig.roadLength * 0.5 + sceneConfig.roadStartZ * 0.5);
+      environmentGroup.add(leftGlowMesh);
+
+      const rightGlowMesh = new THREE.Mesh(edgeGlowGeometry, edgeGlowMaterial);
+      rightGlowMesh.position.set(sceneConfig.roadHalfWidth - 0.38, sceneConfig.roadSurfaceY + 0.23, sceneConfig.roadLength * 0.5 + sceneConfig.roadStartZ * 0.5);
+      environmentGroup.add(rightGlowMesh);
+
+      const centerLineMaterial = new THREE.MeshBasicMaterial({ color: 0xffd96b, transparent: true, opacity: 0.78, depthWrite: false });
+      const centerLineGeometry = new THREE.BoxGeometry(0.08, 0.03, sceneConfig.roadLength);
+      const centerLineLeftMesh = new THREE.Mesh(centerLineGeometry, centerLineMaterial);
+      centerLineLeftMesh.position.set(-0.22, sceneConfig.roadSurfaceY + 0.24, sceneConfig.roadLength * 0.5 + sceneConfig.roadStartZ * 0.5);
+      environmentGroup.add(centerLineLeftMesh);
+
+      const centerLineRightMesh = new THREE.Mesh(centerLineGeometry, centerLineMaterial);
+      centerLineRightMesh.position.set(0.22, sceneConfig.roadSurfaceY + 0.24, sceneConfig.roadLength * 0.5 + sceneConfig.roadStartZ * 0.5);
+      environmentGroup.add(centerLineRightMesh);
+
+      createLaneMarkerInstances(environmentGroup);
+      createSidePostInstances(environmentGroup, bridgeOrangeMaterial);
+      createBridgeTowers(environmentGroup, bridgeOrangeMaterial);
+      createSuspensionSystem(environmentGroup);
+
+      return {
+        waterMesh,
+        waterTexture,
+        bridgeOrangeMaterial
+      };
+    }
+
+    function createRidgelineMesh(sideSign, ridgeMaterial) {
+      const ridgeGeometry = new THREE.BufferGeometry();
+      const ridgeVertexArray = [];
+      const ridgePoints = [
+        [-1200, 18], [-960, 34], [-780, 30], [-620, 44], [-420, 28], [-260, 38], [-80, 24],
+        [120, 32], [280, 22], [500, 35], [700, 30], [930, 50], [1180, 26]
+      ];
+
+      ridgeVertexArray.push(-1400, -8, -100);
+      ridgeVertexArray.push(-1400, 68, -100);
+
+      ridgePoints.forEach((ridgePointEntry) => {
+        ridgeVertexArray.push(ridgePointEntry[0], ridgePointEntry[1], -100);
+      });
+
+      ridgeVertexArray.push(1400, 62, -100);
+      ridgeVertexArray.push(1400, -8, -100);
+
+      const ridgeIndexArray = [];
+      for (let ridgeIndex = 1; ridgeIndex < ridgeVertexArray.length / 3 - 1; ridgeIndex += 1) {
+        ridgeIndexArray.push(0, ridgeIndex, ridgeIndex + 1);
+      }
+
+      ridgeGeometry.setAttribute('position', new THREE.Float32BufferAttribute(ridgeVertexArray, 3));
+      ridgeGeometry.setIndex(ridgeIndexArray);
+      ridgeGeometry.computeVertexNormals();
+
+      const ridgeMesh = new THREE.Mesh(ridgeGeometry, ridgeMaterial);
+      ridgeMesh.rotation.y = sideSign > 0 ? Math.PI * 0.5 : -Math.PI * 0.5;
+      ridgeMesh.position.set(sideSign * 250, 8, 1480);
+      return ridgeMesh;
+    }
+
+    function createWaterTexture() {
+      const waterCanvas = document.createElement('canvas');
+      waterCanvas.width = 256;
+      waterCanvas.height = 256;
+      const waterCanvasContext = waterCanvas.getContext('2d');
+
+      const waterGradient = waterCanvasContext.createLinearGradient(0, 0, 0, waterCanvas.height);
+      waterGradient.addColorStop(0, '#2f5b7b');
+      waterGradient.addColorStop(0.5, '#244866');
+      waterGradient.addColorStop(1, '#1d3e58');
+      waterCanvasContext.fillStyle = waterGradient;
+      waterCanvasContext.fillRect(0, 0, waterCanvas.width, waterCanvas.height);
+
+      waterCanvasContext.globalAlpha = 0.16;
+      for (let rippleIndex = 0; rippleIndex < 120; rippleIndex += 1) {
+        const rippleYPosition = Math.random() * waterCanvas.height;
+        const rippleXPosition = Math.random() * waterCanvas.width;
+        const rippleWidth = 30 + Math.random() * 120;
+        const rippleHeight = 1 + Math.random() * 2;
+        waterCanvasContext.fillStyle = rippleIndex % 3 === 0 ? '#b8e1ff' : '#75a9ce';
+        waterCanvasContext.fillRect(rippleXPosition, rippleYPosition, rippleWidth, rippleHeight);
+      }
+
+      waterCanvasContext.globalAlpha = 0.08;
+      for (let sparkleIndex = 0; sparkleIndex < 380; sparkleIndex += 1) {
+        waterCanvasContext.fillStyle = sparkleIndex % 2 === 0 ? '#e7f5ff' : '#8fc7e8';
+        waterCanvasContext.fillRect(Math.random() * waterCanvas.width, Math.random() * waterCanvas.height, 1.5, 1.5);
+      }
+
+      return new THREE.CanvasTexture(waterCanvas);
+    }
+
+    function createLaneMarkerInstances(parentGroup) {
+      const dashedLineGeometry = new THREE.BoxGeometry(0.16, 0.03, 6.6);
+      const dashedLineMaterial = new THREE.MeshBasicMaterial({ color: 0xf7f4e4, transparent: true, opacity: 0.88, depthWrite: false });
+      const laneBoundaryXPositions = [-8.15, -4.05, 4.05, 8.15];
+      const laneMarkerCount = laneBoundaryXPositions.length * 260;
+      const laneMarkerMesh = new THREE.InstancedMesh(dashedLineGeometry, dashedLineMaterial, laneMarkerCount);
+      const laneMarkerHelper = new THREE.Object3D();
+      laneMarkerMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+      let laneMarkerCursor = 0;
+
+      laneBoundaryXPositions.forEach((boundaryXPositionValue) => {
+        for (let markerSegmentIndex = 0; markerSegmentIndex < 260; markerSegmentIndex += 1) {
+          laneMarkerHelper.position.set(
+            boundaryXPositionValue,
+            sceneConfig.roadSurfaceY + 0.2,
+            sceneConfig.roadStartZ + 8 + markerSegmentIndex * 16
+          );
+          laneMarkerHelper.updateMatrix();
+          laneMarkerMesh.setMatrixAt(laneMarkerCursor, laneMarkerHelper.matrix);
+          laneMarkerCursor += 1;
+        }
+      });
+
+      laneMarkerMesh.instanceMatrix.needsUpdate = true;
+      parentGroup.add(laneMarkerMesh);
+    }
+
+    function createSidePostInstances(parentGroup, postMaterial) {
+      const sidePostGeometry = new THREE.BoxGeometry(0.16, 1.45, 0.16);
+      const sidePostCount = 360;
+      const sidePostMesh = new THREE.InstancedMesh(sidePostGeometry, postMaterial, sidePostCount);
+      const sidePostHelper = new THREE.Object3D();
+      sidePostMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+
+      let sidePostCursor = 0;
+      for (let bridgeSpanIndex = 0; bridgeSpanIndex < 180; bridgeSpanIndex += 1) {
+        const postZPositionValue = sceneConfig.roadStartZ + bridgeSpanIndex * 24;
+
+        sidePostHelper.position.set(-sceneConfig.roadHalfWidth - 0.72, sceneConfig.roadSurfaceY + 0.48, postZPositionValue);
+        sidePostHelper.updateMatrix();
+        sidePostMesh.setMatrixAt(sidePostCursor, sidePostHelper.matrix);
+        sidePostCursor += 1;
+
+        sidePostHelper.position.set(sceneConfig.roadHalfWidth + 0.72, sceneConfig.roadSurfaceY + 0.48, postZPositionValue);
+        sidePostHelper.updateMatrix();
+        sidePostMesh.setMatrixAt(sidePostCursor, sidePostHelper.matrix);
+        sidePostCursor += 1;
+      }
+
+      sidePostMesh.instanceMatrix.needsUpdate = true;
+      parentGroup.add(sidePostMesh);
+    }
+
+    function createBridgeTowers(parentGroup, orangeMaterial) {
+      sceneConfig.towerZPositions.forEach((towerZPositionValue) => {
+        const towerGroup = new THREE.Group();
+        const towerLegGeometry = new THREE.BoxGeometry(3.5, 130, 3.2);
+        const towerCrossbeamGeometry = new THREE.BoxGeometry(28.5, 3.2, 2.8);
+        const towerBraceGeometry = new THREE.BoxGeometry(28.8, 1.25, 1.5);
+        const towerUpperFrameGeometry = new THREE.BoxGeometry(28.5, 2.6, 3.0);
+        const towerInnerFrameGeometry = new THREE.BoxGeometry(20.2, 1.0, 1.2);
+
+        const leftTowerLegMesh = new THREE.Mesh(towerLegGeometry, orangeMaterial);
+        leftTowerLegMesh.position.set(-13.0, 81.2, towerZPositionValue);
+        towerGroup.add(leftTowerLegMesh);
+
+        const rightTowerLegMesh = new THREE.Mesh(towerLegGeometry, orangeMaterial);
+        rightTowerLegMesh.position.set(13.0, 81.2, towerZPositionValue);
+        towerGroup.add(rightTowerLegMesh);
+
+        const lowerCrossbeamMesh = new THREE.Mesh(towerCrossbeamGeometry, orangeMaterial);
+        lowerCrossbeamMesh.position.set(0, 45, towerZPositionValue);
+        towerGroup.add(lowerCrossbeamMesh);
+
+        const middleCrossbeamMesh = new THREE.Mesh(towerCrossbeamGeometry, orangeMaterial);
+        middleCrossbeamMesh.position.set(0, 84, towerZPositionValue);
+        towerGroup.add(middleCrossbeamMesh);
+
+        const upperCrossbeamMesh = new THREE.Mesh(towerUpperFrameGeometry, orangeMaterial);
+        upperCrossbeamMesh.position.set(0, 118.5, towerZPositionValue);
+        towerGroup.add(upperCrossbeamMesh);
+
+        const topCapMesh = new THREE.Mesh(new THREE.BoxGeometry(31.5, 2.0, 3.4), orangeMaterial);
+        topCapMesh.position.set(0, 144.5, towerZPositionValue);
+        towerGroup.add(topCapMesh);
+
+        const upperInnerFrameMesh = new THREE.Mesh(towerInnerFrameGeometry, orangeMaterial);
+        upperInnerFrameMesh.position.set(0, 132.5, towerZPositionValue);
+        towerGroup.add(upperInnerFrameMesh);
+
+        const lowerBraceMesh = new THREE.Mesh(towerBraceGeometry, orangeMaterial);
+        lowerBraceMesh.position.set(0, 30.5, towerZPositionValue);
+        towerGroup.add(lowerBraceMesh);
+
+        const underDeckBraceMesh = new THREE.Mesh(new THREE.BoxGeometry(24.8, 0.9, 2.0), orangeMaterial);
+        underDeckBraceMesh.position.set(0, 17.8, towerZPositionValue);
+        towerGroup.add(underDeckBraceMesh);
+
+        const frontFrameMesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, 110, 0.8), orangeMaterial);
+        frontFrameMesh.position.set(-7.8, 89.5, towerZPositionValue + 1.1);
+        towerGroup.add(frontFrameMesh);
+
+        const rearFrameMesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, 110, 0.8), orangeMaterial);
+        rearFrameMesh.position.set(7.8, 89.5, towerZPositionValue - 1.1);
+        towerGroup.add(rearFrameMesh);
+
+        parentGroup.add(towerGroup);
+      });
+    }
+
+    function createSuspensionSystem(parentGroup) {
+      const mainCableMaterial = new THREE.MeshBasicMaterial({ color: 0x192330, transparent: true, opacity: 0.95 });
+      const cableRadius = 0.22;
+      const leftCablePoints = [];
+      const rightCablePoints = [];
+
+      for (let cableSampleIndex = 0; cableSampleIndex <= 150; cableSampleIndex += 1) {
+        const cableZPositionValue = -140 + cableSampleIndex * 16;
+        const cableHeightValue = getCableHeightAtZ(cableZPositionValue);
+        leftCablePoints.push(new THREE.Vector3(-15.55, cableHeightValue, cableZPositionValue));
+        rightCablePoints.push(new THREE.Vector3(15.55, cableHeightValue, cableZPositionValue));
+      }
+
+      const leftCableCurve = new THREE.CatmullRomCurve3(leftCablePoints);
+      const rightCableCurve = new THREE.CatmullRomCurve3(rightCablePoints);
+      const leftCableGeometry = new THREE.TubeGeometry(leftCableCurve, 220, cableRadius, 8, false);
+      const rightCableGeometry = new THREE.TubeGeometry(rightCableCurve, 220, cableRadius, 8, false);
+      const leftCableMesh = new THREE.Mesh(leftCableGeometry, mainCableMaterial);
+      const rightCableMesh = new THREE.Mesh(rightCableGeometry, mainCableMaterial);
+      parentGroup.add(leftCableMesh, rightCableMesh);
+
+      const hangerGeometry = new THREE.BoxGeometry(0.08, 1, 0.08);
+      const hangerMaterial = new THREE.MeshBasicMaterial({ color: 0x202d3c, transparent: true, opacity: 0.9 });
+      const hangerCount = 2 * 136;
+      const hangerMesh = new THREE.InstancedMesh(hangerGeometry, hangerMaterial, hangerCount);
+      const hangerHelper = new THREE.Object3D();
+      hangerMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+
+      let hangerCursor = 0;
+      for (let hangerIndex = 0; hangerIndex < 136; hangerIndex += 1) {
+        const hangerZPositionValue = 40 + hangerIndex * 13;
+        const hangerTopYValue = getCableHeightAtZ(hangerZPositionValue);
+        const hangerHeightValue = Math.max(8, hangerTopYValue - (sceneConfig.roadSurfaceY + 1.0));
+
+        hangerHelper.position.set(-15.55, sceneConfig.roadSurfaceY + hangerHeightValue * 0.5 + 0.8, hangerZPositionValue);
+        hangerHelper.scale.set(1, hangerHeightValue, 1);
+        hangerHelper.updateMatrix();
+        hangerMesh.setMatrixAt(hangerCursor, hangerHelper.matrix);
+        hangerCursor += 1;
+
+        hangerHelper.position.set(15.55, sceneConfig.roadSurfaceY + hangerHeightValue * 0.5 + 0.8, hangerZPositionValue);
+        hangerHelper.scale.set(1, hangerHeightValue, 1);
+        hangerHelper.updateMatrix();
+        hangerMesh.setMatrixAt(hangerCursor, hangerHelper.matrix);
+        hangerCursor += 1;
+      }
+
+      hangerMesh.instanceMatrix.needsUpdate = true;
+      parentGroup.add(hangerMesh);
+    }
+
+    function getCableHeightAtZ(zPositionValue) {
+      const anchorStartZ = -140;
+      const anchorEndZ = 2150;
+      const anchorHeightValue = 44;
+      const towerTopHeightValue = 141.5;
+      const midSpanHeightValue = 84;
+      const firstTowerZPositionValue = sceneConfig.towerZPositions[0];
+      const secondTowerZPositionValue = sceneConfig.towerZPositions[1];
+      const midSpanZPositionValue = (firstTowerZPositionValue + secondTowerZPositionValue) * 0.5;
+
+      if (zPositionValue <= firstTowerZPositionValue) {
+        return THREE.MathUtils.lerp(anchorHeightValue, towerTopHeightValue, THREE.MathUtils.clamp((zPositionValue - anchorStartZ) / (firstTowerZPositionValue - anchorStartZ), 0, 1));
+      }
+
+      if (zPositionValue >= secondTowerZPositionValue) {
+        return THREE.MathUtils.lerp(towerTopHeightValue, anchorHeightValue, THREE.MathUtils.clamp((zPositionValue - secondTowerZPositionValue) / (anchorEndZ - secondTowerZPositionValue), 0, 1));
+      }
+
+      const spanOffsetValue = zPositionValue - midSpanZPositionValue;
+      const towerSpanDistanceValue = firstTowerZPositionValue - midSpanZPositionValue;
+      const curvatureValue = (towerTopHeightValue - midSpanHeightValue) / (towerSpanDistanceValue * towerSpanDistanceValue);
+      return midSpanHeightValue + curvatureValue * spanOffsetValue * spanOffsetValue;
+    }
+
+    function createPlayerCar(parentGroup) {
+      const playerGroup = new THREE.Group();
+      parentGroup.add(playerGroup);
+
+      const playerBodyMaterial = new THREE.MeshStandardMaterial({
+        color: 0x0e1319,
+        metalness: 0.48,
+        roughness: 0.38,
+        emissive: new THREE.Color(0x3fd7ff),
+        emissiveIntensity: 0.24
+      });
+      const playerCanopyMaterial = new THREE.MeshStandardMaterial({ color: 0x7bd6ff, transparent: true, opacity: 0.68, metalness: 0.18, roughness: 0.12 });
+      const playerAccentMaterial = new THREE.MeshBasicMaterial({ color: 0x9ff1ff, transparent: true, opacity: 0.8, depthWrite: false });
+
+      const playerBodyMesh = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.85, 4.7), playerBodyMaterial);
+      playerBodyMesh.position.y = 0.62;
+      playerGroup.add(playerBodyMesh);
+
+      const playerCanopyMesh = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.58, 2.2), playerCanopyMaterial);
+      playerCanopyMesh.position.set(0, 1.1, -0.15);
+      playerGroup.add(playerCanopyMesh);
+
+      const leftAccentMesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.07, 4.2), playerAccentMaterial);
+      leftAccentMesh.position.set(-0.72, 0.82, -0.1);
+      playerGroup.add(leftAccentMesh);
+
+      const rightAccentMesh = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.07, 4.2), playerAccentMaterial);
+      rightAccentMesh.position.set(0.72, 0.82, -0.1);
+      playerGroup.add(rightAccentMesh);
+
+      const trailTexture = createTrailTexture();
+      trailTexture.wrapS = THREE.ClampToEdgeWrapping;
+      trailTexture.wrapT = THREE.ClampToEdgeWrapping;
+      const trailMaterial = new THREE.MeshBasicMaterial({
+        map: trailTexture,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+      const trailMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 15.5), trailMaterial);
+      trailMesh.rotation.x = -Math.PI * 0.5;
+      trailMesh.position.set(0, 0.08, -8.8);
+      trailMesh.scale.set(1, 1.2, 1);
+      playerGroup.add(trailMesh);
+
+      playerGroup.position.set(sceneConfig.initialPlayerX, sceneConfig.roadSurfaceY + 0.15, sceneConfig.initialPlayerZ);
+
+      return {
+        playerGroup,
+        playerBodyMaterial,
+        trailMaterial,
+        trailMesh
+      };
+    }
+
+    function createTrailTexture() {
+      const trailCanvas = document.createElement('canvas');
+      trailCanvas.width = 64;
+      trailCanvas.height = 256;
+      const trailContext = trailCanvas.getContext('2d');
+
+      const trailGradient = trailContext.createLinearGradient(0, 0, 0, trailCanvas.height);
+      trailGradient.addColorStop(0, 'rgba(255,255,255,0)');
+      trailGradient.addColorStop(0.12, 'rgba(140,240,255,0.55)');
+      trailGradient.addColorStop(0.45, 'rgba(70,196,255,0.22)');
+      trailGradient.addColorStop(1, 'rgba(0,0,0,0)');
+      trailContext.fillStyle = trailGradient;
+      trailContext.fillRect(0, 0, trailCanvas.width, trailCanvas.height);
+
+      trailContext.globalCompositeOperation = 'screen';
+      trailContext.fillStyle = 'rgba(255,255,255,0.22)';
+      for (let trailLineIndex = 0; trailLineIndex < 12; trailLineIndex += 1) {
+        const lineWidthValue = 2 + Math.random() * 8;
+        trailContext.fillRect(Math.random() * (trailCanvas.width - lineWidthValue), 0, lineWidthValue, trailCanvas.height);
+      }
+
+      return new THREE.CanvasTexture(trailCanvas);
+    }
+
+    function createPulsePool(parentGroup) {
+      const pulseEntries = [];
+      for (let pulseIndex = 0; pulseIndex < 7; pulseIndex += 1) {
+        const pulseMaterial = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide
+        });
+        const pulseMesh = new THREE.Mesh(new THREE.RingGeometry(0.6, 1.05, 40), pulseMaterial);
+        pulseMesh.rotation.x = -Math.PI * 0.5;
+        pulseMesh.visible = false;
+        parentGroup.add(pulseMesh);
+        pulseEntries.push({
+          pulseMesh,
+          pulseMaterial,
+          active: false,
+          elapsedSeconds: 0,
+          durationSeconds: 0.2,
+          startScale: 1,
+          endScale: 6
+        });
+      }
+
+      return pulseEntries;
+    }
+
+    function createTrafficSystem(parentGroup) {
+      const trafficGroup = new THREE.Group();
+      parentGroup.add(trafficGroup);
+
+      const trafficBodyGeometry = new THREE.BoxGeometry(1, 1, 1);
+      const trafficBodyMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        metalness: 0.3,
+        roughness: 0.56,
+        emissive: new THREE.Color(0x0d1622),
+        emissiveIntensity: 0.22,
+        vertexColors: true
+      });
+      const trafficCanopyGeometry = new THREE.BoxGeometry(1, 1, 1);
+      const trafficCanopyMaterial = new THREE.MeshStandardMaterial({
+        color: 0x92d8ff,
+        transparent: true,
+        opacity: 0.4,
+        metalness: 0.12,
+        roughness: 0.08
+      });
+
+      const trafficBodyMesh = new THREE.InstancedMesh(trafficBodyGeometry, trafficBodyMaterial, sceneConfig.maxTrafficCount);
+      trafficBodyMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      trafficBodyMesh.frustumCulled = false;
+      trafficGroup.add(trafficBodyMesh);
+
+      const trafficCanopyMesh = new THREE.InstancedMesh(trafficCanopyGeometry, trafficCanopyMaterial, sceneConfig.maxTrafficCount);
+      trafficCanopyMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      trafficCanopyMesh.frustumCulled = false;
+      trafficGroup.add(trafficCanopyMesh);
+
+      const trafficStates = [];
+      for (let vehicleIndex = 0; vehicleIndex < sceneConfig.maxTrafficCount; vehicleIndex += 1) {
+        const vehicleState = {
+          laneIndexValue: 0,
+          directionSignValue: 1,
+          xPositionValue: 0,
+          zPositionValue: 0,
+          widthValue: 1.9,
+          lengthValue: 4.2,
+          heightValue: 0.92,
+          canopyHeightValue: 0.5,
+          speedValue: 160,
+          weavePhaseValue: Math.random() * Math.PI * 2,
+          weaveRateValue: 0.7 + Math.random() * 0.8,
+          weaveAmountValue: 0.14 + Math.random() * 0.18,
+          nearMissReady: true,
+          crashIgnoreTimer: 0,
+          colorHexValue: trafficPalette[vehicleIndex % trafficPalette.length]
+        };
+        trafficStates.push(vehicleState);
+      }
+
+      return {
+        trafficBodyMesh,
+        trafficCanopyMesh,
+        trafficStates,
+        bodyHelperObject: new THREE.Object3D(),
+        canopyHelperObject: new THREE.Object3D()
+      };
+    }
+
+    function createBoostGateCollection(parentGroup) {
+      const gateEntries = [];
+      sceneConfig.gateZPositions.forEach((gateZPositionValue, gateIndexValue) => {
+        const gateGroup = new THREE.Group();
+        const gateFrameMaterial = new THREE.MeshBasicMaterial({ color: 0x63d8ff, transparent: true, opacity: 0.86, depthWrite: false });
+        const gateInnerMaterial = new THREE.MeshBasicMaterial({ color: 0x7be9ff, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+        const gateBarGeometry = new THREE.BoxGeometry(0.14, 5.0, 0.18);
+        const gateTopGeometry = new THREE.BoxGeometry(3.8, 0.14, 0.18);
+        const gateLeftBarMesh = new THREE.Mesh(gateBarGeometry, gateFrameMaterial);
+        gateLeftBarMesh.position.set(-1.9, 2.45, 0);
+        gateGroup.add(gateLeftBarMesh);
+
+        const gateRightBarMesh = new THREE.Mesh(gateBarGeometry, gateFrameMaterial);
+        gateRightBarMesh.position.set(1.9, 2.45, 0);
+        gateGroup.add(gateRightBarMesh);
+
+        const gateTopBarMesh = new THREE.Mesh(gateTopGeometry, gateFrameMaterial);
+        gateTopBarMesh.position.set(0, 4.86, 0);
+        gateGroup.add(gateTopBarMesh);
+
+        const gateInnerPlaneMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.45, 4.65), gateInnerMaterial);
+        gateInnerPlaneMesh.position.set(0, 2.45, -0.02);
+        gateGroup.add(gateInnerPlaneMesh);
+
+        gateGroup.position.set(sceneConfig.lanePositions[(gateIndexValue % 4) + 1], sceneConfig.roadSurfaceY + 0.22, gateZPositionValue);
+        parentGroup.add(gateGroup);
+
+        gateEntries.push({
+          gateGroup,
+          gateFrameMaterial,
+          gateInnerMaterial,
+          zPositionValue: gateZPositionValue,
+          laneIndexValue: (gateIndexValue % 4) + 1,
+          hit: false,
+          pulseOffsetValue: Math.random() * Math.PI * 2
+        });
+      });
+      return gateEntries;
+    }
+
+    function updateWaterAnimation(bridgeState, elapsedSeconds) {
+      bridgeState.waterTexture.offset.y = elapsedSeconds * 0.012;
+      bridgeState.waterTexture.offset.x = Math.sin(elapsedSeconds * 0.15) * 0.03;
+      bridgeState.bridgeOrangeMaterial.emissiveIntensity = 0.24 + Math.sin(elapsedSeconds * 0.45) * 0.04;
+    }
+
+    function updatePlayerState(deltaSeconds) {
+      if (gameState.timeRemaining > 0) {
+        gameState.timeRemaining = Math.max(0, gameState.timeRemaining - deltaSeconds);
+      } else {
+        gameState.endingTimer += deltaSeconds;
+      }
+
+      if (gameState.endingTimer > 2.6) {
+        resetRun(false);
+      }
+
+      if (gameState.collisionRecoveryTimer > 0) {
+        gameState.collisionRecoveryTimer = Math.max(0, gameState.collisionRecoveryTimer - deltaSeconds);
+      }
+
+      const steeringDirectionValue = (inputState.steerRightPressed ? 1 : 0) - (inputState.steerLeftPressed ? 1 : 0);
+      const maximumSteerSpeedValue = inputState.brakePressed ? 17 : 25;
+      const targetLateralVelocityValue = steeringDirectionValue * maximumSteerSpeedValue;
+      gameState.lateralVelocity = dampScalar(gameState.lateralVelocity, targetLateralVelocityValue, 10, deltaSeconds);
+      gameState.playerX += gameState.lateralVelocity * deltaSeconds;
+
+      const roadClampValue = sceneConfig.roadHalfWidth - sceneConfig.playerWidth * 0.52;
+      if (gameState.playerX < -roadClampValue) {
+        gameState.playerX = -roadClampValue;
+        if (gameState.collisionRecoveryTimer === 0) {
+          triggerCrash('barrier');
+        }
+      }
+
+      if (gameState.playerX > roadClampValue) {
+        gameState.playerX = roadClampValue;
+        if (gameState.collisionRecoveryTimer === 0) {
+          triggerCrash('barrier');
+        }
+      }
+
+      const brakingActive = inputState.brakePressed && gameState.timeRemaining > 0;
+      const boostingEligible = inputState.boostPressed && gameState.boostCharge > 0.02 && !brakingActive && gameState.timeRemaining > 0;
+      gameState.boostActive = boostingEligible;
+      if (gameState.boostActive) {
+        gameState.boostCharge = Math.max(0, gameState.boostCharge - deltaSeconds * 0.34);
+      }
+
+      const baseTargetSpeedValue = brakingActive ? sceneConfig.brakingSpeed : sceneConfig.baseSpeed;
+      const boostTargetSpeedValue = gameState.boostActive ? sceneConfig.boostedSpeed : baseTargetSpeedValue;
+      const recoveryTargetSpeedValue = gameState.collisionRecoveryTimer > 0 ? sceneConfig.minimumRecoverySpeed : boostTargetSpeedValue;
+      const finalTargetSpeedValue = gameState.timeRemaining === 0 ? Math.max(140, baseTargetSpeedValue - gameState.endingTimer * 35) : recoveryTargetSpeedValue;
+      gameState.playerSpeed = dampScalar(gameState.playerSpeed, finalTargetSpeedValue, 3.5, deltaSeconds);
+      gameState.playerZ += gameState.playerSpeed * deltaSeconds;
+
+      gameState.distanceScore += gameState.playerSpeed * deltaSeconds * 1.06;
+
+      if (gameState.comboValue > 0) {
+        gameState.comboHoldTimer = Math.max(0, gameState.comboHoldTimer - deltaSeconds);
+        if (gameState.comboHoldTimer === 0) {
+          gameState.comboDecayTimer += deltaSeconds;
+          if (gameState.comboDecayTimer > 0.62) {
+            gameState.comboValue = Math.max(0, gameState.comboValue - 1);
+            gameState.comboDecayTimer = 0;
+          }
+        }
+      }
+
+      gameState.displayedScore = Math.floor(gameState.distanceScore + gameState.chainScore + gameState.towerBonusScore);
+      gameState.playerRoll = dampScalar(gameState.playerRoll, -gameState.lateralVelocity * 0.02, 8, deltaSeconds);
+      gameState.pulseKick = Math.max(0, gameState.pulseKick - deltaSeconds * 3.6);
+      gameState.crashKick = Math.max(0, gameState.crashKick - deltaSeconds * 2.2);
+      gameState.towerKick = Math.max(0, gameState.towerKick - deltaSeconds * 2.0);
+
+      playerState.playerGroup.position.set(gameState.playerX, sceneConfig.roadSurfaceY + 0.15, gameState.playerZ);
+      playerState.playerGroup.rotation.set(0, gameState.lateralVelocity * 0.012, gameState.playerRoll);
+      playerState.playerBodyMaterial.emissiveIntensity = 0.18 + gameState.boostCharge * 0.45 + (gameState.boostActive ? 0.34 : 0) + gameState.pulseKick * 0.22;
+      playerState.trailMaterial.opacity = THREE.MathUtils.lerp(playerState.trailMaterial.opacity, gameState.boostActive ? 0.75 : 0.12 + gameState.boostCharge * 0.1, 1 - Math.exp(-deltaSeconds * 12));
+      playerState.trailMesh.scale.set(1 + gameState.boostCharge * 0.18, 1.0 + (gameState.boostActive ? 1.35 : 0.18), 1);
+    }
+
+    function updateTrafficState(deltaSeconds) {
+      const bodyMatrixHelper = trafficState.bodyHelperObject;
+      const canopyMatrixHelper = trafficState.canopyHelperObject;
+      const activeTrafficCountValue = Math.min(gameState.activeTrafficCount, gameState.trafficCountCap);
+      trafficState.trafficBodyMesh.count = activeTrafficCountValue;
+      trafficState.trafficCanopyMesh.count = activeTrafficCountValue;
+
+      for (let vehicleIndex = 0; vehicleIndex < activeTrafficCountValue; vehicleIndex += 1) {
+        const vehicleState = trafficState.trafficStates[vehicleIndex];
+
+        if (vehicleState.crashIgnoreTimer > 0) {
+          vehicleState.crashIgnoreTimer = Math.max(0, vehicleState.crashIgnoreTimer - deltaSeconds);
+        }
+
+        vehicleState.zPositionValue += vehicleState.speedValue * deltaSeconds;
+        vehicleState.weavePhaseValue += deltaSeconds * vehicleState.weaveRateValue;
+        vehicleState.xPositionValue = sceneConfig.lanePositions[vehicleState.laneIndexValue] + Math.sin(vehicleState.weavePhaseValue) * vehicleState.weaveAmountValue;
+
+        const relativeZPositionValue = vehicleState.zPositionValue - gameState.playerZ;
+        if (relativeZPositionValue < -220 || relativeZPositionValue > 1760) {
+          respawnTrafficVehicle(vehicleState, gameState.playerZ, 760, 1260, vehicleIndex);
+        }
+
+        evaluateTrafficInteraction(vehicleState);
+
+        bodyMatrixHelper.position.set(vehicleState.xPositionValue, sceneConfig.roadSurfaceY + vehicleState.heightValue * 0.5, vehicleState.zPositionValue);
+        bodyMatrixHelper.scale.set(vehicleState.widthValue, vehicleState.heightValue, vehicleState.lengthValue);
+        bodyMatrixHelper.rotation.set(0, vehicleState.directionSignValue > 0 ? Math.PI : 0, 0);
+        bodyMatrixHelper.updateMatrix();
+        trafficState.trafficBodyMesh.setMatrixAt(vehicleIndex, bodyMatrixHelper.matrix);
+        trafficState.trafficBodyMesh.setColorAt(vehicleIndex, temporaryColor.setHex(vehicleState.colorHexValue));
+
+        canopyMatrixHelper.position.set(vehicleState.xPositionValue, sceneConfig.roadSurfaceY + vehicleState.heightValue + vehicleState.canopyHeightValue * 0.42, vehicleState.zPositionValue - 0.1);
+        canopyMatrixHelper.scale.set(vehicleState.widthValue * 0.64, vehicleState.canopyHeightValue, vehicleState.lengthValue * 0.52);
+        canopyMatrixHelper.rotation.set(0, vehicleState.directionSignValue > 0 ? Math.PI : 0, 0);
+        canopyMatrixHelper.updateMatrix();
+        trafficState.trafficCanopyMesh.setMatrixAt(vehicleIndex, canopyMatrixHelper.matrix);
+      }
+
+      trafficState.trafficBodyMesh.instanceMatrix.needsUpdate = true;
+      trafficState.trafficCanopyMesh.instanceMatrix.needsUpdate = true;
+      if (trafficState.trafficBodyMesh.instanceColor) {
+        trafficState.trafficBodyMesh.instanceColor.needsUpdate = true;
+      }
+    }
+
+    function respawnTrafficVehicle(vehicleState, playerReferenceZPosition, minimumAheadDistanceValue, maximumAheadDistanceValue, vehicleSeedValue) {
+      const oncomingLaneSet = [0, 1, 2];
+      const outboundLaneSet = [3, 4, 5];
+      const chooseOncomingLane = Math.random() < 0.52;
+      const laneSetValue = chooseOncomingLane ? oncomingLaneSet : outboundLaneSet;
+      const laneArrayIndexValue = Math.floor(Math.random() * laneSetValue.length);
+      const laneIndexValue = laneSetValue[laneArrayIndexValue];
+      const directionSignValue = laneIndexValue < 3 ? -1 : 1;
+
+      vehicleState.laneIndexValue = laneIndexValue;
+      vehicleState.directionSignValue = directionSignValue;
+      vehicleState.widthValue = 1.72 + Math.random() * 0.62;
+      vehicleState.lengthValue = 3.6 + Math.random() * 2.25;
+      vehicleState.heightValue = 0.82 + Math.random() * 0.24;
+      vehicleState.canopyHeightValue = 0.42 + Math.random() * 0.16;
+      vehicleState.speedValue = directionSignValue > 0 ? 138 + Math.random() * 54 : -(176 + Math.random() * 62);
+      vehicleState.weaveAmountValue = 0.08 + Math.random() * 0.17;
+      vehicleState.weaveRateValue = 0.55 + Math.random() * 1.1;
+      vehicleState.weavePhaseValue = Math.random() * Math.PI * 2;
+      vehicleState.zPositionValue = playerReferenceZPosition + minimumAheadDistanceValue + Math.random() * (maximumAheadDistanceValue - minimumAheadDistanceValue) + vehicleSeedValue * 0.35;
+      vehicleState.xPositionValue = sceneConfig.lanePositions[laneIndexValue];
+      vehicleState.nearMissReady = true;
+      vehicleState.crashIgnoreTimer = 0;
+      vehicleState.colorHexValue = trafficPalette[(vehicleSeedValue + Math.floor(Math.random() * trafficPalette.length)) % trafficPalette.length];
+    }
+
+    function evaluateTrafficInteraction(vehicleState) {
+      const deltaXValue = vehicleState.xPositionValue - gameState.playerX;
+      const deltaZValue = vehicleState.zPositionValue - gameState.playerZ;
+      const combinedHalfWidthValue = (vehicleState.widthValue + sceneConfig.playerWidth) * 0.5;
+      const combinedHalfLengthValue = (vehicleState.lengthValue + sceneConfig.playerLength) * 0.5;
+      const relativeSpeedValue = Math.abs(gameState.playerSpeed - vehicleState.speedValue);
+
+      if (vehicleState.nearMissReady && relativeSpeedValue > 58 && Math.abs(deltaZValue) < combinedHalfLengthValue + 1.4) {
+        const nearMissGapValue = Math.abs(deltaXValue);
+        if (nearMissGapValue > combinedHalfWidthValue * 1.02 && nearMissGapValue < combinedHalfWidthValue + 1.24) {
+          vehicleState.nearMissReady = false;
+          registerNearMiss();
+        }
+      }
+
+      if (gameState.collisionRecoveryTimer === 0 && vehicleState.crashIgnoreTimer === 0 && Math.abs(deltaZValue) < combinedHalfLengthValue * 0.9 && Math.abs(deltaXValue) < combinedHalfWidthValue * 0.92) {
+        vehicleState.nearMissReady = false;
+        vehicleState.crashIgnoreTimer = 0.9;
+        vehicleState.zPositionValue += vehicleState.directionSignValue > 0 ? 16 : -16;
+        triggerCrash('traffic');
+      }
+    }
+
+    function updateBoostGateState(deltaSeconds, elapsedSeconds) {
+      boostGateState.forEach((gateEntry) => {
+        const gatePulse = 0.72 + Math.sin(elapsedSeconds * 3.2 + gateEntry.pulseOffsetValue) * 0.18;
+        gateEntry.gateFrameMaterial.opacity = gateEntry.hit ? 0.18 : 0.8 * gatePulse;
+        gateEntry.gateInnerMaterial.opacity = gateEntry.hit ? 0.04 : 0.18 * gatePulse;
+        gateEntry.gateGroup.position.y = sceneConfig.roadSurfaceY + 0.22 + Math.sin(elapsedSeconds * 1.4 + gateEntry.pulseOffsetValue) * 0.08;
+
+        if (!gateEntry.hit && Math.abs(gameState.playerZ - gateEntry.zPositionValue) < 4.8) {
+          const laneCenterXValue = sceneConfig.lanePositions[gateEntry.laneIndexValue];
+          if (Math.abs(gameState.playerX - laneCenterXValue) < 1.95) {
+            gateEntry.hit = true;
+            registerGateHit();
+          }
+        }
+      });
+    }
+
+    function updateTowerPasses() {
+      towerPassState.forEach((towerEntry) => {
+        if (!towerEntry.hasEnteredZone && gameState.playerZ > towerEntry.towerZPositionValue - sceneConfig.towerZoneHalfLength) {
+          towerEntry.hasEnteredZone = true;
+          towerEntry.cleanWindowOpen = true;
+        }
+
+        if (!towerEntry.bonusAwarded && gameState.playerZ > towerEntry.towerZPositionValue + sceneConfig.towerZoneHalfLength) {
+          towerEntry.bonusAwarded = true;
+          if (towerEntry.cleanWindowOpen) {
+            gameState.towerBonusScore += 450;
+            gameState.towerKick = 0.82;
+            spawnPulse(0xff8a4f, 1.25, 8.4, 0.26, 0.15);
+          }
+        }
+      });
+    }
+
+    function updatePulsePool(deltaSeconds) {
+      pulseState.forEach((pulseEntry) => {
+        if (!pulseEntry.active) {
+          return;
+        }
+
+        pulseEntry.elapsedSeconds += deltaSeconds;
+        const normalizedPulseTimeValue = pulseEntry.elapsedSeconds / pulseEntry.durationSeconds;
+        if (normalizedPulseTimeValue >= 1) {
+          pulseEntry.active = false;
+          pulseEntry.pulseMesh.visible = false;
+          return;
+        }
+
+        const easedPulseTimeValue = 1 - Math.pow(1 - normalizedPulseTimeValue, 2);
+        const currentScaleValue = THREE.MathUtils.lerp(pulseEntry.startScale, pulseEntry.endScale, easedPulseTimeValue);
+        pulseEntry.pulseMesh.scale.set(currentScaleValue, currentScaleValue, currentScaleValue);
+        pulseEntry.pulseMaterial.opacity = (1 - normalizedPulseTimeValue) * (1 - normalizedPulseTimeValue) * 0.78;
+      });
+    }
+
+    function updateVisualStyle(deltaSeconds) {
+      const boostFogBlend = gameState.boostActive ? 0.12 : 0;
+      fogColorScratch.copy(fogColorStart).lerp(fogColorEnd, boostFogBlend);
+      scene.fog.color.copy(fogColorScratch);
+      playerState.playerGroup.visible = gameState.cameraMode === 'chase';
+      playerState.trailMaterial.opacity = THREE.MathUtils.clamp(playerState.trailMaterial.opacity, 0, 0.82);
+    }
+
+    function updateCamera(deltaSeconds) {
+      const shakeStrengthValue = gameState.pulseKick * 0.18 + gameState.crashKick * 0.42 + gameState.towerKick * 0.22;
+      const shakeOffsetXValue = (Math.random() - 0.5) * shakeStrengthValue;
+      const shakeOffsetYValue = (Math.random() - 0.5) * shakeStrengthValue * 0.32;
+      const lookAheadDistanceValue = 56 + gameState.playerSpeed * 0.14;
+
+      if (gameState.cameraMode === 'chase') {
+        const lateralCameraLeadValue = gameState.lateralVelocity * 0.18;
+        chaseCameraPosition.set(gameState.playerX * 0.55 + lateralCameraLeadValue + shakeOffsetXValue, 24.8 + shakeOffsetYValue, gameState.playerZ - 16.8);
+        chaseLookPosition.set(gameState.playerX * 0.72, sceneConfig.roadSurfaceY + 2.4, gameState.playerZ + lookAheadDistanceValue);
+        const chaseLerpValue = 1 - Math.exp(-deltaSeconds * 6.5);
+        camera.position.lerp(chaseCameraPosition, chaseLerpValue);
+        camera.lookAt(chaseLookPosition);
+      } else {
+        hoodCameraPosition.set(gameState.playerX + shakeOffsetXValue * 0.35, sceneConfig.roadSurfaceY + 2.08 + shakeOffsetYValue * 0.15, gameState.playerZ + 1.15);
+        hoodLookPosition.set(gameState.playerX + gameState.lateralVelocity * 0.05, sceneConfig.roadSurfaceY + 1.95, gameState.playerZ + lookAheadDistanceValue + 36);
+        const hoodLerpValue = 1 - Math.exp(-deltaSeconds * 12);
+        camera.position.lerp(hoodCameraPosition, hoodLerpValue);
+        camera.lookAt(hoodLookPosition);
+      }
+
+      camera.up.set(0, 1, 0);
+      camera.fov = dampScalar(camera.fov, gameState.cameraMode === 'chase' ? (gameState.boostActive ? 81 : 74 + gameState.pulseKick * 3.4) : (gameState.boostActive ? 86 : 77 + gameState.pulseKick * 2.2), 8, deltaSeconds);
+      camera.updateProjectionMatrix();
+    }
+
+    function updateHud() {
+      timerValueElement.textContent = gameState.timeRemaining.toFixed(1);
+      scoreValueElement.textContent = String(gameState.displayedScore);
+      comboValueElement.textContent = `x${gameState.comboValue}`;
+
+      const comboStrengthValue = Math.min(1, gameState.comboValue / 12);
+      comboColorScratch.copy(comboColorStart).lerp(comboColorEnd, comboStrengthValue);
+      comboValueElement.style.color = `#${comboColorScratch.getHexString()}`;
+      scoreValueElement.style.color = gameState.timeRemaining === 0 ? '#ffd166' : '#7fe3ff';
+    }
+
+    function updatePerformanceBudget(deltaSeconds) {
+      gameState.fpsAccumulatorSeconds += deltaSeconds;
+      gameState.fpsAccumulatorFrames += 1;
+      gameState.smoothedFps = dampScalar(gameState.smoothedFps, 1 / deltaSeconds, 4.2, deltaSeconds);
+
+      if (gameState.fpsAccumulatorSeconds >= 1.15) {
+        const measuredFpsValue = gameState.fpsAccumulatorFrames / gameState.fpsAccumulatorSeconds;
+        if (measuredFpsValue < sceneConfig.fpsFloor && gameState.activeTrafficCount > sceneConfig.minTrafficCount) {
+          gameState.activeTrafficCount = Math.max(sceneConfig.minTrafficCount, gameState.activeTrafficCount - 6);
+        } else if (measuredFpsValue > sceneConfig.fpsCeiling && gameState.activeTrafficCount < gameState.trafficCountCap) {
+          gameState.activeTrafficCount = Math.min(gameState.trafficCountCap, gameState.activeTrafficCount + 2);
+        }
+        gameState.fpsAccumulatorSeconds = 0;
+        gameState.fpsAccumulatorFrames = 0;
+      }
+    }
+
+    function registerNearMiss() {
+      gameState.comboValue = Math.min(99, gameState.comboValue + 1);
+      gameState.comboHoldTimer = 1.55;
+      gameState.comboDecayTimer = 0;
+      gameState.chainScore += 110 + gameState.comboValue * 56;
+      gameState.boostCharge = Math.min(1, gameState.boostCharge + 0.1 + Math.min(0.14, gameState.comboValue * 0.012));
+      gameState.pulseKick = 0.8;
+      spawnPulse(0x88f1ff, 1.0, 5.8, 0.18, 0.16);
+    }
+
+    function registerGateHit() {
+      gameState.comboValue = Math.min(99, gameState.comboValue + 1);
+      gameState.comboHoldTimer = 1.45;
+      gameState.comboDecayTimer = 0;
+      gameState.chainScore += 140 + gameState.comboValue * 34;
+      gameState.boostCharge = Math.min(1, gameState.boostCharge + 0.22);
+      gameState.pulseKick = 0.95;
+      spawnPulse(0x5ce8ff, 1.2, 7.2, 0.24, 0.14);
+    }
+
+    function triggerCrash(crashSourceValue) {
+      gameState.collisionRecoveryTimer = 1.05;
+      gameState.playerSpeed = Math.max(sceneConfig.minimumRecoverySpeed, gameState.playerSpeed * 0.58);
+      gameState.comboValue = Math.floor(gameState.comboValue * 0.35);
+      gameState.comboHoldTimer = 0;
+      gameState.comboDecayTimer = 0;
+      gameState.boostCharge *= crashSourceValue === 'barrier' ? 0.52 : 0.4;
+      gameState.crashKick = crashSourceValue === 'barrier' ? 0.72 : 1.0;
+      spawnPulse(0xff7e53, 1.0, 6.5, 0.2, 0.18);
+
+      towerPassState.forEach((towerEntry) => {
+        if (!towerEntry.bonusAwarded && Math.abs(gameState.playerZ - towerEntry.towerZPositionValue) < sceneConfig.towerZoneHalfLength) {
+          towerEntry.cleanWindowOpen = false;
+        }
+      });
+    }
+
+    function spawnPulse(colorHexValue, startScaleValue, endScaleValue, durationSecondsValue, verticalOffsetValue) {
+      const targetPulseEntry = pulseState.find((pulseEntry) => !pulseEntry.active) || pulseState[0];
+      targetPulseEntry.active = true;
+      targetPulseEntry.elapsedSeconds = 0;
+      targetPulseEntry.durationSeconds = durationSecondsValue;
+      targetPulseEntry.startScale = startScaleValue;
+      targetPulseEntry.endScale = endScaleValue;
+      targetPulseEntry.pulseMaterial.color.setHex(colorHexValue);
+      targetPulseEntry.pulseMaterial.opacity = 0.78;
+      targetPulseEntry.pulseMesh.position.set(gameState.playerX, sceneConfig.roadSurfaceY + verticalOffsetValue, gameState.playerZ);
+      targetPulseEntry.pulseMesh.scale.set(startScaleValue, startScaleValue, startScaleValue);
+      targetPulseEntry.pulseMesh.visible = true;
+    }
+
+    function resetRun(initializingRun) {
+      gameState.playerX = sceneConfig.initialPlayerX;
+      gameState.playerZ = sceneConfig.initialPlayerZ;
+      gameState.playerSpeed = sceneConfig.baseSpeed;
+      gameState.playerRoll = 0;
+      gameState.lateralVelocity = 0;
+      gameState.boostCharge = 0.42;
+      gameState.boostActive = false;
+      gameState.comboValue = 0;
+      gameState.comboHoldTimer = 0;
+      gameState.comboDecayTimer = 0;
+      gameState.distanceScore = 0;
+      gameState.chainScore = 0;
+      gameState.towerBonusScore = 0;
+      gameState.displayedScore = 0;
+      gameState.timeRemaining = sceneConfig.runDurationSeconds;
+      gameState.collisionRecoveryTimer = 0;
+      gameState.endingTimer = 0;
+      gameState.pulseKick = 0;
+      gameState.crashKick = 0;
+      gameState.towerKick = 0;
+      gameState.activeTrafficCount = Math.min(gameState.trafficCountCap, initializingRun ? Math.max(sceneConfig.minTrafficCount, Math.floor(gameState.trafficCountCap * 0.82)) : gameState.trafficCountCap);
+
+      towerPassState.forEach((towerEntry) => {
+        towerEntry.hasEnteredZone = false;
+        towerEntry.bonusAwarded = false;
+        towerEntry.cleanWindowOpen = true;
+      });
+
+      boostGateState.forEach((gateEntry, gateIndexValue) => {
+        const weightedLaneOptions = [1, 2, 3, 4];
+        gateEntry.laneIndexValue = weightedLaneOptions[(gateIndexValue + Math.floor(Math.random() * weightedLaneOptions.length)) % weightedLaneOptions.length];
+        gateEntry.zPositionValue = sceneConfig.gateZPositions[gateIndexValue];
+        gateEntry.gateGroup.position.x = sceneConfig.lanePositions[gateEntry.laneIndexValue];
+        gateEntry.gateGroup.position.z = gateEntry.zPositionValue;
+        gateEntry.hit = false;
+      });
+
+      trafficState.trafficStates.forEach((vehicleState, vehicleIndex) => {
+        respawnTrafficVehicle(vehicleState, gameState.playerZ, 120 + vehicleIndex * 7, 1540, vehicleIndex);
+      });
+
+      playerState.playerGroup.position.set(gameState.playerX, sceneConfig.roadSurfaceY + 0.15, gameState.playerZ);
+      camera.position.set(gameState.playerX * 0.5, 24.8, gameState.playerZ - 16.8);
+      camera.lookAt(gameState.playerX * 0.72, sceneConfig.roadSurfaceY + 2.4, gameState.playerZ + 82);
+    }
+
+    function updateTrafficCapFromViewport() {
+      const viewportAreaValue = window.innerWidth * window.innerHeight;
+      const viewportFactorValue = THREE.MathUtils.clamp(viewportAreaValue / (1600 * 900), 0.55, 1);
+      gameState.trafficCountCap = Math.floor(sceneConfig.minTrafficCount + (sceneConfig.maxTrafficCount - sceneConfig.minTrafficCount) * viewportFactorValue);
+      gameState.activeTrafficCount = Math.min(gameState.activeTrafficCount, gameState.trafficCountCap);
+    }
+
+    function dampScalar(currentValue, targetValue, smoothingValue, deltaSeconds) {
+      return THREE.MathUtils.lerp(currentValue, targetValue, 1 - Math.exp(-smoothingValue * deltaSeconds));
+    }
+  </script>
+</body>
+</html>
