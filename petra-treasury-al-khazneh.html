@@ -1,0 +1,1870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Petra Treasury — Al-Khazneh</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --panel-background: rgba(255, 244, 234, 0.88);
+      --panel-border: rgba(121, 84, 57, 0.26);
+      --panel-shadow: rgba(39, 23, 16, 0.18);
+      --text-primary: #2b1f19;
+      --text-secondary: #6a5649;
+      --accent-color: #9c5736;
+      --accent-color-strong: #b4653c;
+      --button-background: rgba(255, 255, 255, 0.62);
+      --button-border: rgba(121, 84, 57, 0.22);
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #c7d6ee;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text-primary);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #controlPanel {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      width: min(248px, calc(100vw - 28px));
+      background: var(--panel-background);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      box-shadow: 0 12px 28px var(--panel-shadow);
+      backdrop-filter: blur(12px);
+      z-index: 10;
+      user-select: none;
+    }
+
+    #controlPanel summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      cursor: pointer;
+      list-style: none;
+      padding: 11px 13px;
+      font-size: 14px;
+      font-weight: 650;
+      letter-spacing: 0.01em;
+    }
+
+    #controlPanel summary::-webkit-details-marker {
+      display: none;
+    }
+
+    #controlPanel summary::after {
+      content: "▾";
+      color: var(--text-secondary);
+      font-size: 12px;
+      transition: transform 180ms ease;
+    }
+
+    #controlPanel:not([open]) summary::after {
+      transform: rotate(-90deg);
+    }
+
+    #controlPanel[open] summary {
+      border-bottom: 1px solid rgba(121, 84, 57, 0.14);
+    }
+
+    .panelContent {
+      display: grid;
+      gap: 12px;
+      padding: 11px 13px 13px;
+    }
+
+    .controlBlock {
+      display: grid;
+      gap: 6px;
+    }
+
+    .labelLine {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .labelLine strong {
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .rangeLabels {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      margin: 0;
+      accent-color: var(--accent-color-strong);
+    }
+
+    .buttonRow {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid var(--button-border);
+      background: var(--button-background);
+      color: var(--text-primary);
+      border-radius: 10px;
+      padding: 9px 10px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 640;
+      cursor: pointer;
+      transition: transform 140ms ease, background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.78);
+      border-color: rgba(121, 84, 57, 0.3);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button.active {
+      background: linear-gradient(180deg, rgba(184, 104, 63, 0.96), rgba(157, 84, 51, 0.96));
+      color: #fffaf6;
+      border-color: rgba(117, 56, 32, 0.6);
+    }
+
+    #hintBadge {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      padding: 8px 11px;
+      border-radius: 999px;
+      background: rgba(255, 248, 242, 0.68);
+      border: 1px solid rgba(121, 84, 57, 0.16);
+      color: rgba(43, 31, 25, 0.82);
+      box-shadow: 0 8px 20px rgba(39, 23, 16, 0.12);
+      backdrop-filter: blur(8px);
+      font-size: 12px;
+      z-index: 8;
+      pointer-events: none;
+    }
+
+    @media (max-width: 640px) {
+      #controlPanel {
+        width: min(228px, calc(100vw - 22px));
+        top: 11px;
+        left: 11px;
+      }
+
+      #hintBadge {
+        right: 11px;
+        bottom: 11px;
+        font-size: 11px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <details id="controlPanel" open>
+    <summary>The Treasury</summary>
+    <div class="panelContent">
+      <div class="controlBlock">
+        <div class="labelLine">
+          <span>Time of day</span>
+          <strong id="timeOfDayLabel">Morning</strong>
+        </div>
+        <input id="timeOfDaySlider" type="range" min="0" max="100" step="1" value="24" />
+        <div class="rangeLabels">
+          <span>Morning</span>
+          <span>Midday</span>
+          <span>Golden</span>
+        </div>
+      </div>
+      <div class="controlBlock">
+        <div class="labelLine">
+          <span>Camera</span>
+          <strong>Orbit</strong>
+        </div>
+        <div class="buttonRow">
+          <button id="plazaViewButton" class="active" type="button">Plaza</button>
+          <button id="detailViewButton" type="button">Close-up</button>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <div id="hintBadge">Drag to orbit · Scroll to zoom</div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const timeOfDaySliderElement = document.getElementById('timeOfDaySlider');
+    const timeOfDayLabelElement = document.getElementById('timeOfDayLabel');
+    const plazaViewButtonElement = document.getElementById('plazaViewButton');
+    const detailViewButtonElement = document.getElementById('detailViewButton');
+
+    const applicationState = {
+      timeOfDayNormalized: Number(timeOfDaySliderElement.value) / 100,
+      activeCameraPreset: 'plaza',
+      cameraTransitionState: null,
+    };
+
+    const mainScene = new THREE.Scene();
+    mainScene.fog = new THREE.Fog(0xd8cec4, 92, 220);
+
+    const mainRenderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance',
+    });
+    mainRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    mainRenderer.setSize(window.innerWidth, window.innerHeight);
+    mainRenderer.outputColorSpace = THREE.SRGBColorSpace;
+    mainRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+    mainRenderer.toneMappingExposure = 1.02;
+    mainRenderer.shadowMap.enabled = true;
+    mainRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(mainRenderer.domElement);
+
+    const mainCamera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 320);
+    const orbitControls = new OrbitControls(mainCamera, mainRenderer.domElement);
+    orbitControls.enableDamping = true;
+    orbitControls.dampingFactor = 0.055;
+    orbitControls.enablePan = false;
+    orbitControls.minDistance = 13;
+    orbitControls.maxDistance = 118;
+    orbitControls.minPolarAngle = 0.24;
+    orbitControls.maxPolarAngle = Math.PI / 2.02;
+    orbitControls.minAzimuthAngle = -Math.PI * 0.46;
+    orbitControls.maxAzimuthAngle = Math.PI * 0.46;
+
+    const cameraPresets = {
+      plaza: {
+        position: new THREE.Vector3(0, 22.5, 70),
+        target: new THREE.Vector3(0, 18.4, 0),
+      },
+      detail: {
+        position: new THREE.Vector3(9.5, 20.5, 22),
+        target: new THREE.Vector3(4.2, 19.7, 0.8),
+      },
+    };
+
+    mainCamera.position.copy(cameraPresets.plaza.position);
+    orbitControls.target.copy(cameraPresets.plaza.target);
+
+    const materialLibrary = createMaterialLibrary(mainRenderer);
+
+    const siteRootGroup = new THREE.Group();
+    mainScene.add(siteRootGroup);
+
+    const skyDomeState = createSkyDome();
+    mainScene.add(skyDomeState.skyMesh);
+
+    const lightingState = createLightingState();
+    mainScene.add(lightingState.hemisphereLight);
+    mainScene.add(lightingState.ambientLight);
+    mainScene.add(lightingState.sunLight);
+    mainScene.add(lightingState.sunTargetObject);
+
+    const plazaGroundMesh = createPlazaGround(materialLibrary);
+    siteRootGroup.add(plazaGroundMesh);
+
+    const cliffAssemblyGroup = createCliffAssembly(materialLibrary);
+    siteRootGroup.add(cliffAssemblyGroup);
+
+    const treasuryAssemblyGroup = createTreasuryAssembly(materialLibrary);
+    siteRootGroup.add(treasuryAssemblyGroup);
+
+    const scaleReferenceGroup = createScaleReferenceGroup(materialLibrary);
+    siteRootGroup.add(scaleReferenceGroup);
+
+    siteRootGroup.position.y = 0;
+
+    timeOfDaySliderElement.addEventListener('input', () => {
+      applicationState.timeOfDayNormalized = Number(timeOfDaySliderElement.value) / 100;
+      updateLightingAndSky(applicationState.timeOfDayNormalized, lightingState, skyDomeState);
+      updateTimeOfDayLabel(applicationState.timeOfDayNormalized);
+    });
+
+    plazaViewButtonElement.addEventListener('click', () => {
+      activateCameraPreset('plaza');
+    });
+
+    detailViewButtonElement.addEventListener('click', () => {
+      activateCameraPreset('detail');
+    });
+
+    window.addEventListener('resize', () => {
+      mainCamera.aspect = window.innerWidth / window.innerHeight;
+      mainCamera.updateProjectionMatrix();
+      mainRenderer.setSize(window.innerWidth, window.innerHeight);
+      mainRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    });
+
+    updateLightingAndSky(applicationState.timeOfDayNormalized, lightingState, skyDomeState);
+    updateTimeOfDayLabel(applicationState.timeOfDayNormalized);
+    orbitControls.update();
+
+    function animateScene(animationTimeMilliseconds) {
+      requestAnimationFrame(animateScene);
+      updateCameraTransition(animationTimeMilliseconds);
+      orbitControls.update();
+      mainRenderer.render(mainScene, mainCamera);
+    }
+
+    requestAnimationFrame(animateScene);
+
+    function activateCameraPreset(presetName) {
+      const selectedPreset = cameraPresets[presetName];
+      if (!selectedPreset) {
+        return;
+      }
+
+      applicationState.activeCameraPreset = presetName;
+      applicationState.cameraTransitionState = {
+        startTimeMilliseconds: performance.now(),
+        durationMilliseconds: 1100,
+        startPosition: mainCamera.position.clone(),
+        startTarget: orbitControls.target.clone(),
+        endPosition: selectedPreset.position.clone(),
+        endTarget: selectedPreset.target.clone(),
+      };
+
+      plazaViewButtonElement.classList.toggle('active', presetName === 'plaza');
+      detailViewButtonElement.classList.toggle('active', presetName === 'detail');
+    }
+
+    function updateCameraTransition(animationTimeMilliseconds) {
+      const currentTransitionState = applicationState.cameraTransitionState;
+      if (!currentTransitionState) {
+        return;
+      }
+
+      const transitionElapsedMilliseconds = animationTimeMilliseconds - currentTransitionState.startTimeMilliseconds;
+      const transitionProgress = clampValue(
+        transitionElapsedMilliseconds / currentTransitionState.durationMilliseconds,
+        0,
+        1,
+      );
+      const easedTransitionProgress = smoothstepValue(0, 1, transitionProgress);
+
+      mainCamera.position.lerpVectors(
+        currentTransitionState.startPosition,
+        currentTransitionState.endPosition,
+        easedTransitionProgress,
+      );
+      orbitControls.target.lerpVectors(
+        currentTransitionState.startTarget,
+        currentTransitionState.endTarget,
+        easedTransitionProgress,
+      );
+
+      if (transitionProgress >= 1) {
+        applicationState.cameraTransitionState = null;
+      }
+    }
+
+    function updateTimeOfDayLabel(timeOfDayNormalized) {
+      if (timeOfDayNormalized < 0.34) {
+        timeOfDayLabelElement.textContent = 'Morning';
+        return;
+      }
+
+      if (timeOfDayNormalized < 0.67) {
+        timeOfDayLabelElement.textContent = 'Midday';
+        return;
+      }
+
+      timeOfDayLabelElement.textContent = 'Golden';
+    }
+
+    function createLightingState() {
+      const hemisphereLight = new THREE.HemisphereLight(0xd7e5ff, 0xd79f69, 1.05);
+      const ambientLight = new THREE.AmbientLight(0xf7dcc0, 0.28);
+      const sunLight = new THREE.DirectionalLight(0xffdfbc, 3.2);
+      const sunTargetObject = new THREE.Object3D();
+      sunTargetObject.position.set(0, 14, 0);
+
+      sunLight.castShadow = true;
+      sunLight.target = sunTargetObject;
+      sunLight.shadow.mapSize.set(1536, 1536);
+      sunLight.shadow.camera.left = -40;
+      sunLight.shadow.camera.right = 40;
+      sunLight.shadow.camera.top = 34;
+      sunLight.shadow.camera.bottom = -8;
+      sunLight.shadow.camera.near = 24;
+      sunLight.shadow.camera.far = 150;
+      sunLight.shadow.normalBias = 0.028;
+      sunLight.shadow.bias = -0.0007;
+
+      return {
+        hemisphereLight,
+        ambientLight,
+        sunLight,
+        sunTargetObject,
+      };
+    }
+
+    function updateLightingAndSky(timeOfDayNormalized, lightingStateObject, skyDomeStateObject) {
+      const morningBlendFactor = smoothstepValue(0, 0.5, timeOfDayNormalized);
+      const eveningBlendFactor = smoothstepValue(0.5, 1, timeOfDayNormalized);
+
+      const morningSunPosition = new THREE.Vector3(-42, 18, 34);
+      const middaySunPosition = new THREE.Vector3(-8, 42, 26);
+      const goldenSunPosition = new THREE.Vector3(39, 16, 30);
+
+      const interpolatedSunPosition = new THREE.Vector3();
+      if (timeOfDayNormalized <= 0.5) {
+        interpolatedSunPosition.copy(morningSunPosition).lerp(middaySunPosition, morningBlendFactor);
+      } else {
+        interpolatedSunPosition.copy(middaySunPosition).lerp(goldenSunPosition, eveningBlendFactor);
+      }
+
+      lightingStateObject.sunLight.position.copy(interpolatedSunPosition);
+      lightingStateObject.sunTargetObject.position.set(0, 17.5, 0);
+
+      const morningSunColor = new THREE.Color('#ffd2a6');
+      const middaySunColor = new THREE.Color('#fff4dd');
+      const goldenSunColor = new THREE.Color('#ffbf88');
+      const morningSkyColor = new THREE.Color('#86b3ea');
+      const middaySkyColor = new THREE.Color('#5f99e6');
+      const goldenSkyColor = new THREE.Color('#6595d7');
+      const morningHorizonColor = new THREE.Color('#f4d2b2');
+      const middayHorizonColor = new THREE.Color('#f4e0c6');
+      const goldenHorizonColor = new THREE.Color('#f6c39b');
+      const morningGroundColor = new THREE.Color('#e0bc96');
+      const middayGroundColor = new THREE.Color('#dfbf9d');
+      const goldenGroundColor = new THREE.Color('#d6a278');
+      const morningFogColor = new THREE.Color('#dccdc1');
+      const middayFogColor = new THREE.Color('#e5d8cb');
+      const goldenFogColor = new THREE.Color('#d7bea9');
+
+      const blendedSunColor = new THREE.Color();
+      const blendedSkyColor = new THREE.Color();
+      const blendedHorizonColor = new THREE.Color();
+      const blendedGroundColor = new THREE.Color();
+      const blendedFogColor = new THREE.Color();
+
+      if (timeOfDayNormalized <= 0.5) {
+        blendedSunColor.copy(morningSunColor).lerp(middaySunColor, morningBlendFactor);
+        blendedSkyColor.copy(morningSkyColor).lerp(middaySkyColor, morningBlendFactor);
+        blendedHorizonColor.copy(morningHorizonColor).lerp(middayHorizonColor, morningBlendFactor);
+        blendedGroundColor.copy(morningGroundColor).lerp(middayGroundColor, morningBlendFactor);
+        blendedFogColor.copy(morningFogColor).lerp(middayFogColor, morningBlendFactor);
+      } else {
+        blendedSunColor.copy(middaySunColor).lerp(goldenSunColor, eveningBlendFactor);
+        blendedSkyColor.copy(middaySkyColor).lerp(goldenSkyColor, eveningBlendFactor);
+        blendedHorizonColor.copy(middayHorizonColor).lerp(goldenHorizonColor, eveningBlendFactor);
+        blendedGroundColor.copy(middayGroundColor).lerp(goldenGroundColor, eveningBlendFactor);
+        blendedFogColor.copy(middayFogColor).lerp(goldenFogColor, eveningBlendFactor);
+      }
+
+      const sunIntensity = timeOfDayNormalized < 0.5
+        ? lerpValue(2.95, 3.45, morningBlendFactor)
+        : lerpValue(3.45, 2.85, eveningBlendFactor);
+      const hemisphereIntensity = timeOfDayNormalized < 0.5
+        ? lerpValue(1.0, 1.15, morningBlendFactor)
+        : lerpValue(1.15, 0.95, eveningBlendFactor);
+      const ambientIntensity = timeOfDayNormalized < 0.5
+        ? lerpValue(0.23, 0.32, morningBlendFactor)
+        : lerpValue(0.32, 0.26, eveningBlendFactor);
+
+      lightingStateObject.sunLight.color.copy(blendedSunColor);
+      lightingStateObject.sunLight.intensity = sunIntensity;
+      lightingStateObject.hemisphereLight.color.copy(blendedSkyColor);
+      lightingStateObject.hemisphereLight.groundColor.copy(blendedGroundColor);
+      lightingStateObject.hemisphereLight.intensity = hemisphereIntensity;
+      lightingStateObject.ambientLight.color.copy(blendedHorizonColor);
+      lightingStateObject.ambientLight.intensity = ambientIntensity;
+
+      skyDomeStateObject.uniforms.topColor.value.copy(blendedSkyColor);
+      skyDomeStateObject.uniforms.horizonColor.value.copy(blendedHorizonColor);
+      skyDomeStateObject.uniforms.groundColor.value.copy(blendedGroundColor);
+
+      mainScene.fog.color.copy(blendedFogColor);
+      mainRenderer.toneMappingExposure = timeOfDayNormalized < 0.5
+        ? lerpValue(0.96, 1.06, morningBlendFactor)
+        : lerpValue(1.06, 1.0, eveningBlendFactor);
+    }
+
+    function createSkyDome() {
+      const skyUniforms = {
+        topColor: { value: new THREE.Color('#5f99e6') },
+        horizonColor: { value: new THREE.Color('#f4e0c6') },
+        groundColor: { value: new THREE.Color('#dfbf9d') },
+      };
+
+      const skyMaterial = new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        depthWrite: false,
+        uniforms: skyUniforms,
+        vertexShader: `
+          varying vec3 vWorldDirection;
+          void main() {
+            vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+            vWorldDirection = normalize(worldPosition.xyz);
+            gl_Position = projectionMatrix * viewMatrix * worldPosition;
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 topColor;
+          uniform vec3 horizonColor;
+          uniform vec3 groundColor;
+          varying vec3 vWorldDirection;
+          void main() {
+            float verticalMix = clamp(vWorldDirection.y * 0.5 + 0.5, 0.0, 1.0);
+            float horizonBlend = smoothstep(0.18, 0.82, verticalMix);
+            vec3 skyBlend = mix(horizonColor, topColor, horizonBlend);
+            float groundBlend = smoothstep(0.0, 0.28, verticalMix);
+            vec3 finalColor = mix(groundColor, skyBlend, groundBlend);
+            gl_FragColor = vec4(finalColor, 1.0);
+          }
+        `,
+      });
+
+      const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(250, 48, 24), skyMaterial);
+      return {
+        skyMesh,
+        uniforms: skyUniforms,
+      };
+    }
+
+    function createMaterialLibrary(rendererInstance) {
+      const supportedAnisotropy = Math.min(8, rendererInstance.capabilities.getMaxAnisotropy());
+
+      const treasuryTexturePair = createSandstoneTexturePair(512, 2.4, 1.7, supportedAnisotropy, 0.8);
+      const cliffTexturePair = createSandstoneTexturePair(512, 5.6, 2.4, supportedAnisotropy, 2.4);
+      const sandTexturePair = createSandTexturePair(512, 18, 12, supportedAnisotropy);
+
+      const treasuryStoneMaterial = new THREE.MeshStandardMaterial({
+        map: treasuryTexturePair.colorTexture,
+        bumpMap: treasuryTexturePair.heightTexture,
+        bumpScale: 0.42,
+        roughness: 0.93,
+        metalness: 0,
+      });
+
+      const treasuryAccentMaterial = treasuryStoneMaterial.clone();
+      treasuryAccentMaterial.color = new THREE.Color('#efb394');
+      treasuryAccentMaterial.bumpScale = 0.55;
+
+      const treasuryRecessMaterial = treasuryStoneMaterial.clone();
+      treasuryRecessMaterial.color = new THREE.Color('#cf8768');
+      treasuryRecessMaterial.bumpScale = 0.58;
+
+      const cliffStoneMaterial = new THREE.MeshStandardMaterial({
+        map: cliffTexturePair.colorTexture,
+        bumpMap: cliffTexturePair.heightTexture,
+        bumpScale: 0.55,
+        roughness: 0.97,
+        metalness: 0,
+      });
+      cliffStoneMaterial.color = new THREE.Color('#d28b6c');
+
+      const sandMaterial = new THREE.MeshStandardMaterial({
+        map: sandTexturePair.colorTexture,
+        bumpMap: sandTexturePair.heightTexture,
+        bumpScale: 0.16,
+        roughness: 1,
+        metalness: 0,
+        color: new THREE.Color('#e0c193'),
+      });
+
+      const darkInteriorMaterial = new THREE.MeshStandardMaterial({
+        color: '#2f241c',
+        roughness: 1,
+        metalness: 0,
+      });
+
+      const figureMaterial = new THREE.MeshStandardMaterial({
+        color: '#5d4034',
+        roughness: 0.92,
+        metalness: 0,
+      });
+
+      const clothMaterial = new THREE.MeshStandardMaterial({
+        color: '#bca58b',
+        roughness: 0.96,
+        metalness: 0,
+      });
+
+      const camelMaterial = new THREE.MeshStandardMaterial({
+        color: '#8f684d',
+        roughness: 0.95,
+        metalness: 0,
+      });
+
+      return {
+        treasuryStoneMaterial,
+        treasuryAccentMaterial,
+        treasuryRecessMaterial,
+        cliffStoneMaterial,
+        sandMaterial,
+        darkInteriorMaterial,
+        figureMaterial,
+        clothMaterial,
+        camelMaterial,
+      };
+    }
+
+    function createSandstoneTexturePair(textureResolution, repeatHorizontal, repeatVertical, anisotropyLevel, seedOffset) {
+      const sandstoneColorCanvas = document.createElement('canvas');
+      sandstoneColorCanvas.width = textureResolution;
+      sandstoneColorCanvas.height = textureResolution;
+      const sandstoneColorContext = sandstoneColorCanvas.getContext('2d');
+      const sandstoneColorData = sandstoneColorContext.createImageData(textureResolution, textureResolution);
+      const sandstoneColorPixels = sandstoneColorData.data;
+
+      const sandstoneHeightCanvas = document.createElement('canvas');
+      sandstoneHeightCanvas.width = textureResolution;
+      sandstoneHeightCanvas.height = textureResolution;
+      const sandstoneHeightContext = sandstoneHeightCanvas.getContext('2d');
+      const sandstoneHeightData = sandstoneHeightContext.createImageData(textureResolution, textureResolution);
+      const sandstoneHeightPixels = sandstoneHeightData.data;
+
+      const sandstonePalette = [
+        [246, 206, 171],
+        [235, 169, 132],
+        [223, 133, 104],
+        [196, 102, 87],
+        [247, 198, 161],
+      ];
+
+      for (let pixelYIndex = 0; pixelYIndex < textureResolution; pixelYIndex += 1) {
+        for (let pixelXIndex = 0; pixelXIndex < textureResolution; pixelXIndex += 1) {
+          const textureSampleX = pixelXIndex / textureResolution;
+          const textureSampleY = pixelYIndex / textureResolution;
+          const pixelOffset = (pixelYIndex * textureResolution + pixelXIndex) * 4;
+
+          const horizontalStrata = Math.sin((textureSampleY * 24 + seedOffset) * Math.PI) * 0.38;
+          const secondaryBands = Math.sin((textureSampleY * 59 + textureSampleX * 5.4 + seedOffset * 0.7) * Math.PI) * 0.21;
+          const fineBands = Math.sin((textureSampleY * 135 + textureSampleX * 13.2 + seedOffset * 1.9) * Math.PI) * 0.09;
+          const granularNoise = pseudoRandomFromCoordinates(textureSampleX * 251, textureSampleY * 277, seedOffset) - 0.5;
+          const diagonalNoise = pseudoRandomFromCoordinates(textureSampleX * 481 + textureSampleY * 93, textureSampleY * 397, seedOffset + 2.7) - 0.5;
+          const bandSelectorValue = fractValue(
+            textureSampleY * 3.9 +
+            horizontalStrata * 0.19 +
+            secondaryBands * 0.14 +
+            granularNoise * 0.1 +
+            seedOffset * 0.17
+          );
+          const scaledPaletteIndex = bandSelectorValue * (sandstonePalette.length - 1);
+          const lowerPaletteIndex = Math.floor(scaledPaletteIndex);
+          const upperPaletteIndex = Math.min(sandstonePalette.length - 1, lowerPaletteIndex + 1);
+          const paletteBlendAmount = scaledPaletteIndex - lowerPaletteIndex;
+
+          const lowerPaletteColor = sandstonePalette[lowerPaletteIndex];
+          const upperPaletteColor = sandstonePalette[upperPaletteIndex];
+
+          const redChannelValue = lerpValue(lowerPaletteColor[0], upperPaletteColor[0], paletteBlendAmount);
+          const greenChannelValue = lerpValue(lowerPaletteColor[1], upperPaletteColor[1], paletteBlendAmount);
+          const blueChannelValue = lerpValue(lowerPaletteColor[2], upperPaletteColor[2], paletteBlendAmount);
+
+          const stoneVariationValue = horizontalStrata * 32 + secondaryBands * 24 + fineBands * 14 + granularNoise * 18 + diagonalNoise * 10;
+          sandstoneColorPixels[pixelOffset] = clampValue(redChannelValue + stoneVariationValue, 0, 255);
+          sandstoneColorPixels[pixelOffset + 1] = clampValue(greenChannelValue + stoneVariationValue * 0.82, 0, 255);
+          sandstoneColorPixels[pixelOffset + 2] = clampValue(blueChannelValue + stoneVariationValue * 0.75, 0, 255);
+          sandstoneColorPixels[pixelOffset + 3] = 255;
+
+          const crackNoiseValue = Math.abs(Math.sin((textureSampleX * 18 + textureSampleY * 11 + seedOffset) * Math.PI));
+          const heightValue = 138 + horizontalStrata * 34 + secondaryBands * 26 + fineBands * 22 + granularNoise * 30 + crackNoiseValue * 18;
+          sandstoneHeightPixels[pixelOffset] = clampValue(heightValue, 0, 255);
+          sandstoneHeightPixels[pixelOffset + 1] = clampValue(heightValue, 0, 255);
+          sandstoneHeightPixels[pixelOffset + 2] = clampValue(heightValue, 0, 255);
+          sandstoneHeightPixels[pixelOffset + 3] = 255;
+        }
+      }
+
+      sandstoneColorContext.putImageData(sandstoneColorData, 0, 0);
+      sandstoneHeightContext.putImageData(sandstoneHeightData, 0, 0);
+
+      const colorTexture = new THREE.CanvasTexture(sandstoneColorCanvas);
+      colorTexture.wrapS = THREE.RepeatWrapping;
+      colorTexture.wrapT = THREE.RepeatWrapping;
+      colorTexture.repeat.set(repeatHorizontal, repeatVertical);
+      colorTexture.anisotropy = anisotropyLevel;
+      colorTexture.colorSpace = THREE.SRGBColorSpace;
+
+      const heightTexture = new THREE.CanvasTexture(sandstoneHeightCanvas);
+      heightTexture.wrapS = THREE.RepeatWrapping;
+      heightTexture.wrapT = THREE.RepeatWrapping;
+      heightTexture.repeat.set(repeatHorizontal, repeatVertical);
+      heightTexture.anisotropy = anisotropyLevel;
+
+      return {
+        colorTexture,
+        heightTexture,
+      };
+    }
+
+    function createSandTexturePair(textureResolution, repeatHorizontal, repeatVertical, anisotropyLevel) {
+      const sandColorCanvas = document.createElement('canvas');
+      sandColorCanvas.width = textureResolution;
+      sandColorCanvas.height = textureResolution;
+      const sandColorContext = sandColorCanvas.getContext('2d');
+      const sandColorData = sandColorContext.createImageData(textureResolution, textureResolution);
+      const sandColorPixels = sandColorData.data;
+
+      const sandHeightCanvas = document.createElement('canvas');
+      sandHeightCanvas.width = textureResolution;
+      sandHeightCanvas.height = textureResolution;
+      const sandHeightContext = sandHeightCanvas.getContext('2d');
+      const sandHeightData = sandHeightContext.createImageData(textureResolution, textureResolution);
+      const sandHeightPixels = sandHeightData.data;
+
+      for (let sandPixelYIndex = 0; sandPixelYIndex < textureResolution; sandPixelYIndex += 1) {
+        for (let sandPixelXIndex = 0; sandPixelXIndex < textureResolution; sandPixelXIndex += 1) {
+          const sandSampleX = sandPixelXIndex / textureResolution;
+          const sandSampleY = sandPixelYIndex / textureResolution;
+          const sandPixelOffset = (sandPixelYIndex * textureResolution + sandPixelXIndex) * 4;
+
+          const duneWaveValue = Math.sin((sandSampleX * 28 + sandSampleY * 4.2) * Math.PI) * 0.14;
+          const crossWaveValue = Math.sin((sandSampleY * 24 - sandSampleX * 3.1) * Math.PI) * 0.11;
+          const grainNoiseValue = pseudoRandomFromCoordinates(sandSampleX * 731, sandSampleY * 593, 5.3) - 0.5;
+          const pebbleNoiseValue = pseudoRandomFromCoordinates(sandSampleX * 1201, sandSampleY * 1817, 8.9) - 0.5;
+          const toneShiftValue = duneWaveValue * 18 + crossWaveValue * 12 + grainNoiseValue * 22;
+
+          sandColorPixels[sandPixelOffset] = clampValue(225 + toneShiftValue, 0, 255);
+          sandColorPixels[sandPixelOffset + 1] = clampValue(195 + toneShiftValue * 0.87, 0, 255);
+          sandColorPixels[sandPixelOffset + 2] = clampValue(147 + toneShiftValue * 0.72, 0, 255);
+          sandColorPixels[sandPixelOffset + 3] = 255;
+
+          const sandHeightValue = 126 + duneWaveValue * 34 + crossWaveValue * 24 + grainNoiseValue * 30 + pebbleNoiseValue * 24;
+          sandHeightPixels[sandPixelOffset] = clampValue(sandHeightValue, 0, 255);
+          sandHeightPixels[sandPixelOffset + 1] = clampValue(sandHeightValue, 0, 255);
+          sandHeightPixels[sandPixelOffset + 2] = clampValue(sandHeightValue, 0, 255);
+          sandHeightPixels[sandPixelOffset + 3] = 255;
+        }
+      }
+
+      sandColorContext.putImageData(sandColorData, 0, 0);
+      sandHeightContext.putImageData(sandHeightData, 0, 0);
+
+      const colorTexture = new THREE.CanvasTexture(sandColorCanvas);
+      colorTexture.wrapS = THREE.RepeatWrapping;
+      colorTexture.wrapT = THREE.RepeatWrapping;
+      colorTexture.repeat.set(repeatHorizontal, repeatVertical);
+      colorTexture.anisotropy = anisotropyLevel;
+      colorTexture.colorSpace = THREE.SRGBColorSpace;
+
+      const heightTexture = new THREE.CanvasTexture(sandHeightCanvas);
+      heightTexture.wrapS = THREE.RepeatWrapping;
+      heightTexture.wrapT = THREE.RepeatWrapping;
+      heightTexture.repeat.set(repeatHorizontal, repeatVertical);
+      heightTexture.anisotropy = anisotropyLevel;
+
+      return {
+        colorTexture,
+        heightTexture,
+      };
+    }
+
+    function createPlazaGround(materialLibraryObject) {
+      const plazaGeometry = new THREE.PlaneGeometry(220, 150, 150, 100);
+      plazaGeometry.rotateX(-Math.PI / 2);
+
+      const plazaPositionAttribute = plazaGeometry.attributes.position;
+      const plazaVertex = new THREE.Vector3();
+
+      for (let plazaVertexIndex = 0; plazaVertexIndex < plazaPositionAttribute.count; plazaVertexIndex += 1) {
+        plazaVertex.fromBufferAttribute(plazaPositionAttribute, plazaVertexIndex);
+        const plazaDistanceFromCenter = Math.sqrt(
+          plazaVertex.x * plazaVertex.x +
+          (plazaVertex.z - 24) * (plazaVertex.z - 24)
+        );
+        const plazaFlatteningFactor = smoothstepValue(0, 28, plazaDistanceFromCenter);
+        const duneRippleValue = Math.sin(plazaVertex.x * 0.15 + plazaVertex.z * 0.07) * 0.09;
+        const broadUndulationValue = Math.sin(plazaVertex.x * 0.035) * 0.24 + Math.sin(plazaVertex.z * 0.04 + 1.2) * 0.18;
+        const granularGroundNoise = layeredRockNoise(plazaVertex.x * 0.18, plazaVertex.z * 0.15, 7.2) * 0.22;
+        const cliffFootLift = Math.max(0, (-2 - plazaVertex.z)) * 0.085;
+        plazaVertex.y = (duneRippleValue + broadUndulationValue + granularGroundNoise) * plazaFlatteningFactor + cliffFootLift;
+        plazaPositionAttribute.setXYZ(plazaVertexIndex, plazaVertex.x, plazaVertex.y, plazaVertex.z);
+      }
+
+      plazaGeometry.computeVertexNormals();
+      const plazaMesh = new THREE.Mesh(plazaGeometry, materialLibraryObject.sandMaterial);
+      plazaMesh.receiveShadow = true;
+      return plazaMesh;
+    }
+
+    function createCliffAssembly(materialLibraryObject) {
+      const cliffAssemblyGroup = new THREE.Group();
+
+      const leftCliffBlock = createRockBlock(38, 58, 18, 2.25, 1.7, materialLibraryObject.cliffStoneMaterial);
+      leftCliffBlock.position.set(-39, 29, -10.2);
+      cliffAssemblyGroup.add(leftCliffBlock);
+
+      const rightCliffBlock = createRockBlock(38, 58, 18, 2.1, 2.9, materialLibraryObject.cliffStoneMaterial);
+      rightCliffBlock.position.set(39, 29, -10.1);
+      cliffAssemblyGroup.add(rightCliffBlock);
+
+      const upperCliffBlock = createRockBlock(114, 18, 18, 1.8, 4.3, materialLibraryObject.cliffStoneMaterial);
+      upperCliffBlock.position.set(0, 50.7, -10.2);
+      cliffAssemblyGroup.add(upperCliffBlock);
+
+      const backWallMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(35.4, 42.2, 1.6),
+        materialLibraryObject.treasuryRecessMaterial,
+      );
+      backWallMesh.position.set(0, 21.1, -4.7);
+      backWallMesh.castShadow = false;
+      backWallMesh.receiveShadow = true;
+      cliffAssemblyGroup.add(backWallMesh);
+
+      const leftCavityWallMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(2.4, 42, 5.4),
+        materialLibraryObject.treasuryRecessMaterial,
+      );
+      leftCavityWallMesh.position.set(-17.8, 21, -6.2);
+      leftCavityWallMesh.castShadow = true;
+      leftCavityWallMesh.receiveShadow = true;
+      cliffAssemblyGroup.add(leftCavityWallMesh);
+
+      const rightCavityWallMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(2.4, 42, 5.4),
+        materialLibraryObject.treasuryRecessMaterial,
+      );
+      rightCavityWallMesh.position.set(17.8, 21, -6.2);
+      rightCavityWallMesh.castShadow = true;
+      rightCavityWallMesh.receiveShadow = true;
+      cliffAssemblyGroup.add(rightCavityWallMesh);
+
+      const leftNeighborTombGroup = createNeighboringTomb(materialLibraryObject, 7.2, 10.4, 1.55);
+      leftNeighborTombGroup.position.set(-52, 15.6, -0.45);
+      cliffAssemblyGroup.add(leftNeighborTombGroup);
+
+      const leftUpperTombGroup = createNeighboringTomb(materialLibraryObject, 5.4, 7.6, 1.2);
+      leftUpperTombGroup.scale.setScalar(0.78);
+      leftUpperTombGroup.position.set(-33.6, 24.2, -0.25);
+      cliffAssemblyGroup.add(leftUpperTombGroup);
+
+      const rightNeighborTombGroup = createNeighboringTomb(materialLibraryObject, 6.7, 9.8, 1.45);
+      rightNeighborTombGroup.position.set(51.5, 18.2, -0.42);
+      cliffAssemblyGroup.add(rightNeighborTombGroup);
+
+      const rightUpperTombGroup = createNeighboringTomb(materialLibraryObject, 4.8, 6.8, 1.05);
+      rightUpperTombGroup.scale.setScalar(0.72);
+      rightUpperTombGroup.position.set(33.3, 27.5, -0.18);
+      cliffAssemblyGroup.add(rightUpperTombGroup);
+
+      return cliffAssemblyGroup;
+    }
+
+    function createRockBlock(blockWidth, blockHeight, blockDepth, displacementAmplitude, noiseSeedValue, materialInstance) {
+      const widthSegments = Math.max(18, Math.round(blockWidth * 1.2));
+      const heightSegments = Math.max(12, Math.round(blockHeight * 0.8));
+      const rockGeometry = new THREE.BoxGeometry(blockWidth, blockHeight, blockDepth, widthSegments, heightSegments, 4);
+      const rockPositionAttribute = rockGeometry.attributes.position;
+      const rockVertex = new THREE.Vector3();
+      const frontFaceDepth = blockDepth / 2;
+      const outerFaceWidth = blockWidth / 2;
+      const topFaceHeight = blockHeight / 2;
+
+      for (let rockVertexIndex = 0; rockVertexIndex < rockPositionAttribute.count; rockVertexIndex += 1) {
+        rockVertex.fromBufferAttribute(rockPositionAttribute, rockVertexIndex);
+        const frontSurfaceFactor = smoothstepValue(frontFaceDepth - 0.2, frontFaceDepth, rockVertex.z);
+        const topSurfaceFactor = smoothstepValue(topFaceHeight - 0.2, topFaceHeight, rockVertex.y);
+        const sideSurfaceFactor = smoothstepValue(outerFaceWidth - 0.2, outerFaceWidth, Math.abs(rockVertex.x));
+
+        if (frontSurfaceFactor > 0) {
+          const primaryFaceNoise = layeredRockNoise(rockVertex.x * 0.14, rockVertex.y * 0.11, noiseSeedValue);
+          const striationNoise = Math.sin(rockVertex.y * 0.52 + noiseSeedValue * 2.1) * 0.32;
+          const chippedNoise = (pseudoRandomFromCoordinates(rockVertex.x * 0.37, rockVertex.y * 0.29, noiseSeedValue + 5.4) - 0.5) * 0.7;
+          rockVertex.z += (primaryFaceNoise + striationNoise + chippedNoise) * displacementAmplitude * frontSurfaceFactor;
+        }
+
+        if (topSurfaceFactor > 0) {
+          const topNoise = layeredRockNoise(rockVertex.x * 0.09, rockVertex.z * 0.12, noiseSeedValue + 3.8);
+          rockVertex.y += topNoise * 2.6 * topSurfaceFactor;
+        }
+
+        if (sideSurfaceFactor > 0) {
+          const sideNoise = layeredRockNoise(rockVertex.y * 0.12, rockVertex.z * 0.08, noiseSeedValue + 7.6);
+          rockVertex.x += Math.sign(rockVertex.x) * sideNoise * 1.05 * sideSurfaceFactor;
+        }
+
+        rockPositionAttribute.setXYZ(rockVertexIndex, rockVertex.x, rockVertex.y, rockVertex.z);
+      }
+
+      rockGeometry.computeVertexNormals();
+      const rockMesh = new THREE.Mesh(rockGeometry, materialInstance);
+      rockMesh.castShadow = true;
+      rockMesh.receiveShadow = true;
+      return rockMesh;
+    }
+
+    function createNeighboringTomb(materialLibraryObject, tombWidth, tombHeight, tombDepth) {
+      const neighboringTombGroup = new THREE.Group();
+
+      const recessMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(tombWidth * 0.68, tombHeight * 0.7, tombDepth),
+        materialLibraryObject.darkInteriorMaterial,
+      );
+      recessMesh.position.set(0, tombHeight * 0.32, -tombDepth * 0.42);
+      recessMesh.castShadow = false;
+      recessMesh.receiveShadow = true;
+      neighboringTombGroup.add(recessMesh);
+
+      const leftFrameMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(tombWidth * 0.14, tombHeight * 0.8, tombDepth * 0.45),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      leftFrameMesh.position.set(-tombWidth * 0.36, tombHeight * 0.31, tombDepth * 0.06);
+      leftFrameMesh.castShadow = true;
+      leftFrameMesh.receiveShadow = true;
+      neighboringTombGroup.add(leftFrameMesh);
+
+      const rightFrameMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(tombWidth * 0.14, tombHeight * 0.8, tombDepth * 0.45),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      rightFrameMesh.position.set(tombWidth * 0.36, tombHeight * 0.31, tombDepth * 0.06);
+      rightFrameMesh.castShadow = true;
+      rightFrameMesh.receiveShadow = true;
+      neighboringTombGroup.add(rightFrameMesh);
+
+      const lintelMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(tombWidth * 0.84, tombHeight * 0.11, tombDepth * 0.5),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      lintelMesh.position.set(0, tombHeight * 0.64, tombDepth * 0.08);
+      lintelMesh.castShadow = true;
+      lintelMesh.receiveShadow = true;
+      neighboringTombGroup.add(lintelMesh);
+
+      const lowerStepMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(tombWidth * 0.9, tombHeight * 0.08, tombDepth * 0.46),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      lowerStepMesh.position.set(0, tombHeight * 0.05, tombDepth * 0.09);
+      lowerStepMesh.castShadow = true;
+      lowerStepMesh.receiveShadow = true;
+      neighboringTombGroup.add(lowerStepMesh);
+
+      const steppedCrownWidths = [0.78, 0.58, 0.36];
+      steppedCrownWidths.forEach((crownScale, crownIndex) => {
+        const crownMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(tombWidth * crownScale, tombHeight * 0.075, tombDepth * 0.42),
+          materialLibraryObject.treasuryStoneMaterial,
+        );
+        crownMesh.position.set(0, tombHeight * (0.77 + crownIndex * 0.07), tombDepth * 0.12);
+        crownMesh.castShadow = true;
+        crownMesh.receiveShadow = true;
+        neighboringTombGroup.add(crownMesh);
+      });
+
+      return neighboringTombGroup;
+    }
+
+    function createTreasuryAssembly(materialLibraryObject) {
+      const treasuryAssemblyGroup = new THREE.Group();
+
+      const foundationAssemblyGroup = createFoundationAssembly(materialLibraryObject);
+      treasuryAssemblyGroup.add(foundationAssemblyGroup);
+
+      const lowerStoreyGroup = createLowerStoreyAssembly(materialLibraryObject);
+      treasuryAssemblyGroup.add(lowerStoreyGroup);
+
+      const upperStoreyGroup = createUpperStoreyAssembly(materialLibraryObject);
+      treasuryAssemblyGroup.add(upperStoreyGroup);
+
+      return treasuryAssemblyGroup;
+    }
+
+    function createFoundationAssembly(materialLibraryObject) {
+      const foundationAssemblyGroup = new THREE.Group();
+      const foundationSteps = [
+        { width: 31.8, height: 0.55, depth: 4.3, positionY: 0.28, positionZ: 1.55 },
+        { width: 30.8, height: 0.48, depth: 3.65, positionY: 0.82, positionZ: 1.22 },
+        { width: 29.8, height: 0.42, depth: 3.05, positionY: 1.29, positionZ: 0.94 },
+        { width: 28.7, height: 0.74, depth: 2.35, positionY: 1.87, positionZ: 0.58 },
+      ];
+
+      foundationSteps.forEach((stepConfiguration) => {
+        const stepMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(stepConfiguration.width, stepConfiguration.height, stepConfiguration.depth),
+          materialLibraryObject.treasuryStoneMaterial,
+        );
+        stepMesh.position.set(0, stepConfiguration.positionY, stepConfiguration.positionZ);
+        stepMesh.castShadow = true;
+        stepMesh.receiveShadow = true;
+        foundationAssemblyGroup.add(stepMesh);
+      });
+
+      const centralLandingMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(8.8, 0.38, 1.75),
+        materialLibraryObject.treasuryAccentMaterial,
+      );
+      centralLandingMesh.position.set(0, 2.46, 0.3);
+      centralLandingMesh.castShadow = true;
+      centralLandingMesh.receiveShadow = true;
+      foundationAssemblyGroup.add(centralLandingMesh);
+
+      const stairRiserPositions = [2.77, 3.04, 3.28];
+      stairRiserPositions.forEach((riserHeight, riserIndex) => {
+        const stairMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(7.4 - riserIndex * 0.58, 0.24, 1.12 - riserIndex * 0.1),
+          materialLibraryObject.treasuryAccentMaterial,
+        );
+        stairMesh.position.set(0, riserHeight, 0.04 - riserIndex * 0.13);
+        stairMesh.castShadow = true;
+        stairMesh.receiveShadow = true;
+        foundationAssemblyGroup.add(stairMesh);
+      });
+
+      return foundationAssemblyGroup;
+    }
+
+    function createLowerStoreyAssembly(materialLibraryObject) {
+      const lowerStoreyGroup = new THREE.Group();
+
+      const lowerBackWallMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(28.6, 15.8, 0.48),
+        materialLibraryObject.treasuryRecessMaterial,
+      );
+      lowerBackWallMesh.position.set(0, 10.4, -0.95);
+      lowerBackWallMesh.castShadow = false;
+      lowerBackWallMesh.receiveShadow = true;
+      lowerStoreyGroup.add(lowerBackWallMesh);
+
+      const lowerAtticWallMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(25.8, 3.1, 0.42),
+        materialLibraryObject.treasuryRecessMaterial,
+      );
+      lowerAtticWallMesh.position.set(0, 24.5, -0.82);
+      lowerAtticWallMesh.castShadow = false;
+      lowerAtticWallMesh.receiveShadow = true;
+      lowerStoreyGroup.add(lowerAtticWallMesh);
+
+      const leftOuterPilasterMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(1.55, 17.4, 1.52),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      leftOuterPilasterMesh.position.set(-14.35, 11.2, 0.34);
+      leftOuterPilasterMesh.castShadow = true;
+      leftOuterPilasterMesh.receiveShadow = true;
+      lowerStoreyGroup.add(leftOuterPilasterMesh);
+
+      const rightOuterPilasterMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(1.55, 17.4, 1.52),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      rightOuterPilasterMesh.position.set(14.35, 11.2, 0.34);
+      rightOuterPilasterMesh.castShadow = true;
+      rightOuterPilasterMesh.receiveShadow = true;
+      lowerStoreyGroup.add(rightOuterPilasterMesh);
+
+      const centralDoorwayGroup = createCentralDoorwayAssembly(materialLibraryObject);
+      lowerStoreyGroup.add(centralDoorwayGroup);
+
+      const leftSideDoorGroup = createSideDoorAssembly(materialLibraryObject);
+      leftSideDoorGroup.position.set(-8.2, 0, 0);
+      lowerStoreyGroup.add(leftSideDoorGroup);
+
+      const rightSideDoorGroup = createSideDoorAssembly(materialLibraryObject);
+      rightSideDoorGroup.position.set(8.2, 0, 0);
+      lowerStoreyGroup.add(rightSideDoorGroup);
+
+      const lowerColumnTemplate = createColumnAssembly(13.6, 0.61, 1.5, materialLibraryObject);
+      const lowerColumnPositions = [-10.8, -6.5, -2.17, 2.17, 6.5, 10.8];
+      lowerColumnPositions.forEach((columnXPosition) => {
+        const columnCloneGroup = lowerColumnTemplate.clone(true);
+        columnCloneGroup.position.set(columnXPosition, 2.18, 1.22);
+        lowerStoreyGroup.add(columnCloneGroup);
+      });
+
+      const lowerArchitraveMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(28.7, 1.08, 1.06),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      lowerArchitraveMesh.position.set(0, 16.45, 0.76);
+      lowerArchitraveMesh.castShadow = true;
+      lowerArchitraveMesh.receiveShadow = true;
+      lowerStoreyGroup.add(lowerArchitraveMesh);
+
+      const lowerFriezeMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(28.2, 1.2, 0.92),
+        materialLibraryObject.treasuryAccentMaterial,
+      );
+      lowerFriezeMesh.position.set(0, 17.62, 0.7);
+      lowerFriezeMesh.castShadow = true;
+      lowerFriezeMesh.receiveShadow = true;
+      lowerStoreyGroup.add(lowerFriezeMesh);
+
+      addDentilBand(lowerStoreyGroup, 26.8, 28, 18.34, 1.25, materialLibraryObject.treasuryStoneMaterial);
+      addReliefRosettes(lowerStoreyGroup, 22.4, 7, 17.61, 1.16, materialLibraryObject.treasuryStoneMaterial);
+
+      const fullPedimentMesh = createPedimentMesh(23.4, 5.25, 1.16, materialLibraryObject.treasuryStoneMaterial);
+      fullPedimentMesh.position.set(0, 20.9, 0.5);
+      fullPedimentMesh.castShadow = true;
+      fullPedimentMesh.receiveShadow = true;
+      lowerStoreyGroup.add(fullPedimentMesh);
+
+      const pedimentCorniceMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(23.8, 0.38, 0.9),
+        materialLibraryObject.treasuryAccentMaterial,
+      );
+      pedimentCorniceMesh.position.set(0, 18.8, 1.04);
+      pedimentCorniceMesh.castShadow = true;
+      pedimentCorniceMesh.receiveShadow = true;
+      lowerStoreyGroup.add(pedimentCorniceMesh);
+
+      const pedimentMedallionMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.55, 18, 14),
+        materialLibraryObject.treasuryAccentMaterial,
+      );
+      pedimentMedallionMesh.scale.set(1, 1.16, 0.42);
+      pedimentMedallionMesh.position.set(0, 23.15, 1.02);
+      pedimentMedallionMesh.castShadow = true;
+      pedimentMedallionMesh.receiveShadow = true;
+      lowerStoreyGroup.add(pedimentMedallionMesh);
+
+      const leftReliefPanelGroup = createReliefPanel(materialLibraryObject);
+      leftReliefPanelGroup.position.set(-12.25, 7.45, -0.14);
+      lowerStoreyGroup.add(leftReliefPanelGroup);
+
+      const rightReliefPanelGroup = createReliefPanel(materialLibraryObject);
+      rightReliefPanelGroup.position.set(12.25, 7.45, -0.14);
+      lowerStoreyGroup.add(rightReliefPanelGroup);
+
+      return lowerStoreyGroup;
+    }
+
+    function createCentralDoorwayAssembly(materialLibraryObject) {
+      const centralDoorwayGroup = new THREE.Group();
+
+      const doorwayRecessMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(5.6, 10.4, 3.8),
+        materialLibraryObject.darkInteriorMaterial,
+      );
+      doorwayRecessMesh.position.set(0, 8.75, -2.35);
+      doorwayRecessMesh.castShadow = false;
+      doorwayRecessMesh.receiveShadow = true;
+      centralDoorwayGroup.add(doorwayRecessMesh);
+
+      const doorwayLeftJambMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.78, 11.7, 1.1),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      doorwayLeftJambMesh.position.set(-3.1, 9.05, 0.18);
+      doorwayLeftJambMesh.castShadow = true;
+      doorwayLeftJambMesh.receiveShadow = true;
+      centralDoorwayGroup.add(doorwayLeftJambMesh);
+
+      const doorwayRightJambMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.78, 11.7, 1.1),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      doorwayRightJambMesh.position.set(3.1, 9.05, 0.18);
+      doorwayRightJambMesh.castShadow = true;
+      doorwayRightJambMesh.receiveShadow = true;
+      centralDoorwayGroup.add(doorwayRightJambMesh);
+
+      const doorwayLintelMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(7.2, 0.85, 1.12),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      doorwayLintelMesh.position.set(0, 14.55, 0.2);
+      doorwayLintelMesh.castShadow = true;
+      doorwayLintelMesh.receiveShadow = true;
+      centralDoorwayGroup.add(doorwayLintelMesh);
+
+      const doorwayCrownMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(6.8, 0.34, 0.96),
+        materialLibraryObject.treasuryAccentMaterial,
+      );
+      doorwayCrownMesh.position.set(0, 15.05, 0.54);
+      doorwayCrownMesh.castShadow = true;
+      doorwayCrownMesh.receiveShadow = true;
+      centralDoorwayGroup.add(doorwayCrownMesh);
+
+      const doorwaySideTrimHeights = [5.3, 7.05, 8.8, 10.55, 12.3];
+      doorwaySideTrimHeights.forEach((trimHeight) => {
+        const leftTrimMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.22, 0.46, 0.72),
+          materialLibraryObject.treasuryAccentMaterial,
+        );
+        leftTrimMesh.position.set(-3.65, trimHeight, 0.45);
+        leftTrimMesh.castShadow = true;
+        leftTrimMesh.receiveShadow = true;
+        centralDoorwayGroup.add(leftTrimMesh);
+
+        const rightTrimMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.22, 0.46, 0.72),
+          materialLibraryObject.treasuryAccentMaterial,
+        );
+        rightTrimMesh.position.set(3.65, trimHeight, 0.45);
+        rightTrimMesh.castShadow = true;
+        rightTrimMesh.receiveShadow = true;
+        centralDoorwayGroup.add(rightTrimMesh);
+      });
+
+      return centralDoorwayGroup;
+    }
+
+    function createSideDoorAssembly(materialLibraryObject) {
+      const sideDoorGroup = new THREE.Group();
+
+      const sideDoorRecessMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(3.4, 5.85, 2.65),
+        materialLibraryObject.darkInteriorMaterial,
+      );
+      sideDoorRecessMesh.position.set(0, 5.55, -1.95);
+      sideDoorRecessMesh.castShadow = false;
+      sideDoorRecessMesh.receiveShadow = true;
+      sideDoorGroup.add(sideDoorRecessMesh);
+
+      const sideDoorLeftFrameMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.52, 6.9, 0.82),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      sideDoorLeftFrameMesh.position.set(-1.95, 5.85, 0.05);
+      sideDoorLeftFrameMesh.castShadow = true;
+      sideDoorLeftFrameMesh.receiveShadow = true;
+      sideDoorGroup.add(sideDoorLeftFrameMesh);
+
+      const sideDoorRightFrameMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.52, 6.9, 0.82),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      sideDoorRightFrameMesh.position.set(1.95, 5.85, 0.05);
+      sideDoorRightFrameMesh.castShadow = true;
+      sideDoorRightFrameMesh.receiveShadow = true;
+      sideDoorGroup.add(sideDoorRightFrameMesh);
+
+      const sideDoorLintelMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(4.42, 0.55, 0.86),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      sideDoorLintelMesh.position.set(0, 9.16, 0.08);
+      sideDoorLintelMesh.castShadow = true;
+      sideDoorLintelMesh.receiveShadow = true;
+      sideDoorGroup.add(sideDoorLintelMesh);
+
+      const sideDoorOculusRingMesh = new THREE.Mesh(
+        new THREE.TorusGeometry(0.72, 0.15, 12, 28),
+        materialLibraryObject.treasuryAccentMaterial,
+      );
+      sideDoorOculusRingMesh.position.set(0, 10.55, 0.2);
+      sideDoorOculusRingMesh.castShadow = true;
+      sideDoorOculusRingMesh.receiveShadow = true;
+      sideDoorGroup.add(sideDoorOculusRingMesh);
+
+      const sideDoorOculusCoreMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.48, 0.48, 0.38, 24),
+        materialLibraryObject.darkInteriorMaterial,
+      );
+      sideDoorOculusCoreMesh.rotation.x = Math.PI / 2;
+      sideDoorOculusCoreMesh.position.set(0, 10.55, -0.08);
+      sideDoorGroup.add(sideDoorOculusCoreMesh);
+
+      return sideDoorGroup;
+    }
+
+    function createUpperStoreyAssembly(materialLibraryObject) {
+      const upperStoreyGroup = new THREE.Group();
+
+      const upperBackWallMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(26.6, 11.6, 0.42),
+        materialLibraryObject.treasuryRecessMaterial,
+      );
+      upperBackWallMesh.position.set(0, 30.2, -0.82);
+      upperBackWallMesh.castShadow = false;
+      upperBackWallMesh.receiveShadow = true;
+      upperStoreyGroup.add(upperBackWallMesh);
+
+      const pavilionLeftGroup = createUpperPavilionAssembly(materialLibraryObject);
+      pavilionLeftGroup.position.set(-8.75, 23.85, 0);
+      upperStoreyGroup.add(pavilionLeftGroup);
+
+      const pavilionRightGroup = createUpperPavilionAssembly(materialLibraryObject);
+      pavilionRightGroup.position.set(8.75, 23.85, 0);
+      upperStoreyGroup.add(pavilionRightGroup);
+
+      const tholosAssemblyGroup = createTholosAssembly(materialLibraryObject);
+      tholosAssemblyGroup.position.set(0, 23.9, 0.2);
+      upperStoreyGroup.add(tholosAssemblyGroup);
+
+      const leftBrokenPedimentMesh = createBrokenPedimentMesh(8.5, 3.4, 0.98, 'left', materialLibraryObject.treasuryStoneMaterial);
+      leftBrokenPedimentMesh.position.set(-8.95, 34.7, 0.48);
+      leftBrokenPedimentMesh.castShadow = true;
+      leftBrokenPedimentMesh.receiveShadow = true;
+      upperStoreyGroup.add(leftBrokenPedimentMesh);
+
+      const rightBrokenPedimentMesh = createBrokenPedimentMesh(8.5, 3.4, 0.98, 'right', materialLibraryObject.treasuryStoneMaterial);
+      rightBrokenPedimentMesh.position.set(8.95, 34.7, 0.48);
+      rightBrokenPedimentMesh.castShadow = true;
+      rightBrokenPedimentMesh.receiveShadow = true;
+      upperStoreyGroup.add(rightBrokenPedimentMesh);
+
+      const leftObeliskMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.02, 1.22, 5.1, 4),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      leftObeliskMesh.position.set(-12.95, 37.85, -0.1);
+      leftObeliskMesh.rotation.y = Math.PI / 4;
+      leftObeliskMesh.castShadow = true;
+      leftObeliskMesh.receiveShadow = true;
+      upperStoreyGroup.add(leftObeliskMesh);
+
+      const rightObeliskMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.02, 1.22, 5.1, 4),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      rightObeliskMesh.position.set(12.95, 37.85, -0.1);
+      rightObeliskMesh.rotation.y = Math.PI / 4;
+      rightObeliskMesh.castShadow = true;
+      rightObeliskMesh.receiveShadow = true;
+      upperStoreyGroup.add(rightObeliskMesh);
+
+      return upperStoreyGroup;
+    }
+
+    function createUpperPavilionAssembly(materialLibraryObject) {
+      const upperPavilionGroup = new THREE.Group();
+
+      const pavilionWallMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(7.45, 8.8, 0.42),
+        materialLibraryObject.treasuryRecessMaterial,
+      );
+      pavilionWallMesh.position.set(0, 4.45, -0.8);
+      pavilionWallMesh.castShadow = false;
+      pavilionWallMesh.receiveShadow = true;
+      upperPavilionGroup.add(pavilionWallMesh);
+
+      const pavilionColumnTemplate = createColumnAssembly(6.15, 0.33, 0.92, materialLibraryObject);
+      const pavilionColumnOffsets = [-1.72, 1.72];
+      pavilionColumnOffsets.forEach((columnOffset) => {
+        const pavilionColumnClone = pavilionColumnTemplate.clone(true);
+        pavilionColumnClone.position.set(columnOffset, 0.25, 1.0);
+        upperPavilionGroup.add(pavilionColumnClone);
+      });
+
+      const pavilionEntablatureMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(7.8, 0.9, 0.78),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      pavilionEntablatureMesh.position.set(0, 7.55, 0.66);
+      pavilionEntablatureMesh.castShadow = true;
+      pavilionEntablatureMesh.receiveShadow = true;
+      upperPavilionGroup.add(pavilionEntablatureMesh);
+
+      addDentilBand(upperPavilionGroup, 6.9, 10, 8.05, 1.06, materialLibraryObject.treasuryStoneMaterial);
+
+      const centralNicheMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.88, 0.88, 0.36, 24),
+        materialLibraryObject.darkInteriorMaterial,
+      );
+      centralNicheMesh.rotation.x = Math.PI / 2;
+      centralNicheMesh.position.set(0, 4.65, -0.35);
+      upperPavilionGroup.add(centralNicheMesh);
+
+      const nicheFrameMesh = new THREE.Mesh(
+        new THREE.TorusGeometry(1.12, 0.12, 10, 24),
+        materialLibraryObject.treasuryAccentMaterial,
+      );
+      nicheFrameMesh.scale.set(1, 1.42, 0.7);
+      nicheFrameMesh.position.set(0, 4.88, 0.02);
+      nicheFrameMesh.castShadow = true;
+      nicheFrameMesh.receiveShadow = true;
+      upperPavilionGroup.add(nicheFrameMesh);
+
+      return upperPavilionGroup;
+    }
+
+    function createTholosAssembly(materialLibraryObject) {
+      const tholosAssemblyGroup = new THREE.Group();
+
+      const pedestalMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(3.25, 3.48, 1.08, 40),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      pedestalMesh.position.set(0, 0.54, 0.82);
+      pedestalMesh.castShadow = true;
+      pedestalMesh.receiveShadow = true;
+      tholosAssemblyGroup.add(pedestalMesh);
+
+      const drumMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.88, 1.96, 5.4, 40),
+        materialLibraryObject.treasuryRecessMaterial,
+      );
+      drumMesh.position.set(0, 4.22, 0.72);
+      drumMesh.castShadow = true;
+      drumMesh.receiveShadow = true;
+      tholosAssemblyGroup.add(drumMesh);
+
+      const tholosColumnTemplate = createColumnAssembly(4.82, 0.24, 0.68, materialLibraryObject);
+      const tholosColumnAngles = [-76, -45, -15, 15, 45, 76];
+      tholosColumnAngles.forEach((angleDegrees) => {
+        const columnAngleRadians = THREE.MathUtils.degToRad(angleDegrees);
+        const columnRadius = 2.42;
+        const tholosColumnClone = tholosColumnTemplate.clone(true);
+        tholosColumnClone.position.set(
+          Math.sin(columnAngleRadians) * columnRadius,
+          1.02,
+          Math.cos(columnAngleRadians) * columnRadius * 0.92 + 0.82,
+        );
+        tholosAssemblyGroup.add(tholosColumnClone);
+      });
+
+      const tholosEntablatureMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.95, 3.05, 0.68, 40),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      tholosEntablatureMesh.position.set(0, 6.86, 0.82);
+      tholosEntablatureMesh.castShadow = true;
+      tholosEntablatureMesh.receiveShadow = true;
+      tholosAssemblyGroup.add(tholosEntablatureMesh);
+
+      const tholosCorniceMesh = new THREE.Mesh(
+        new THREE.TorusGeometry(2.88, 0.13, 12, 42),
+        materialLibraryObject.treasuryAccentMaterial,
+      );
+      tholosCorniceMesh.rotation.x = Math.PI / 2;
+      tholosCorniceMesh.position.set(0, 7.18, 0.82);
+      tholosCorniceMesh.castShadow = true;
+      tholosCorniceMesh.receiveShadow = true;
+      tholosAssemblyGroup.add(tholosCorniceMesh);
+
+      const roofMesh = new THREE.Mesh(
+        new THREE.ConeGeometry(2.44, 2.95, 36),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      roofMesh.position.set(0, 8.78, 0.82);
+      roofMesh.castShadow = true;
+      roofMesh.receiveShadow = true;
+      tholosAssemblyGroup.add(roofMesh);
+
+      const urnMesh = createUrnMesh(materialLibraryObject.treasuryAccentMaterial);
+      urnMesh.position.set(0, 11.08, 0.82);
+      tholosAssemblyGroup.add(urnMesh);
+
+      return tholosAssemblyGroup;
+    }
+
+    function createUrnMesh(urnMaterial) {
+      const urnProfilePoints = [
+        new THREE.Vector2(0.0, 0),
+        new THREE.Vector2(0.28, 0.02),
+        new THREE.Vector2(0.42, 0.12),
+        new THREE.Vector2(0.5, 0.26),
+        new THREE.Vector2(0.46, 0.44),
+        new THREE.Vector2(0.34, 0.64),
+        new THREE.Vector2(0.32, 0.86),
+        new THREE.Vector2(0.45, 1.08),
+        new THREE.Vector2(0.26, 1.24),
+        new THREE.Vector2(0.14, 1.36),
+        new THREE.Vector2(0.1, 1.54),
+        new THREE.Vector2(0.0, 1.6),
+      ];
+      const urnGeometry = new THREE.LatheGeometry(urnProfilePoints, 24);
+      const urnMesh = new THREE.Mesh(urnGeometry, urnMaterial);
+      urnMesh.scale.set(1.7, 1.7, 1.7);
+      urnMesh.castShadow = true;
+      urnMesh.receiveShadow = true;
+      return urnMesh;
+    }
+
+    function createColumnAssembly(columnHeight, shaftRadius, capitalWidth, materialLibraryObject) {
+      const columnAssemblyGroup = new THREE.Group();
+
+      const baseHeight = columnHeight * 0.12;
+      const capitalHeight = columnHeight * 0.14;
+      const shaftHeight = columnHeight - baseHeight - capitalHeight;
+
+      const basePlinthMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(capitalWidth * 1.04, baseHeight * 0.36, capitalWidth * 1.04),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      basePlinthMesh.position.set(0, baseHeight * 0.18, 0);
+      basePlinthMesh.castShadow = true;
+      basePlinthMesh.receiveShadow = true;
+      columnAssemblyGroup.add(basePlinthMesh);
+
+      const baseTorusMesh = new THREE.Mesh(
+        new THREE.TorusGeometry(shaftRadius * 1.18, shaftRadius * 0.14, 12, 30),
+        materialLibraryObject.treasuryAccentMaterial,
+      );
+      baseTorusMesh.rotation.x = Math.PI / 2;
+      baseTorusMesh.position.set(0, baseHeight * 0.45, 0);
+      baseTorusMesh.castShadow = true;
+      baseTorusMesh.receiveShadow = true;
+      columnAssemblyGroup.add(baseTorusMesh);
+
+      const shaftGeometry = createFlutedCylinderGeometry(shaftHeight, shaftRadius * 0.96, shaftRadius * 1.04, shaftRadius * 0.11, 16, 64, 16);
+      const shaftMesh = new THREE.Mesh(shaftGeometry, materialLibraryObject.treasuryStoneMaterial);
+      shaftMesh.position.set(0, baseHeight + shaftHeight * 0.5, 0);
+      shaftMesh.castShadow = true;
+      shaftMesh.receiveShadow = true;
+      columnAssemblyGroup.add(shaftMesh);
+
+      const neckRingMesh = new THREE.Mesh(
+        new THREE.TorusGeometry(shaftRadius * 0.95, shaftRadius * 0.07, 10, 24),
+        materialLibraryObject.treasuryAccentMaterial,
+      );
+      neckRingMesh.rotation.x = Math.PI / 2;
+      neckRingMesh.position.set(0, baseHeight + shaftHeight + capitalHeight * 0.08, 0);
+      neckRingMesh.castShadow = true;
+      neckRingMesh.receiveShadow = true;
+      columnAssemblyGroup.add(neckRingMesh);
+
+      const leafCrownMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(capitalWidth * 0.42, shaftRadius * 1.12, capitalHeight * 0.68, 24, 1),
+        materialLibraryObject.treasuryAccentMaterial,
+      );
+      leafCrownMesh.position.set(0, baseHeight + shaftHeight + capitalHeight * 0.38, 0);
+      leafCrownMesh.castShadow = true;
+      leafCrownMesh.receiveShadow = true;
+      columnAssemblyGroup.add(leafCrownMesh);
+
+      const abacusMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(capitalWidth, capitalHeight * 0.24, capitalWidth),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      abacusMesh.position.set(0, baseHeight + shaftHeight + capitalHeight * 0.82, 0);
+      abacusMesh.castShadow = true;
+      abacusMesh.receiveShadow = true;
+      columnAssemblyGroup.add(abacusMesh);
+
+      return columnAssemblyGroup;
+    }
+
+    function createFlutedCylinderGeometry(cylinderHeight, radiusTop, radiusBottom, fluteDepth, fluteCount, radialSegmentCount, heightSegmentCount) {
+      const flutedCylinderGeometry = new THREE.CylinderGeometry(
+        radiusTop,
+        radiusBottom,
+        cylinderHeight,
+        radialSegmentCount,
+        heightSegmentCount,
+        true,
+      );
+      const cylinderPositionAttribute = flutedCylinderGeometry.attributes.position;
+      const cylinderVertex = new THREE.Vector3();
+
+      for (let cylinderVertexIndex = 0; cylinderVertexIndex < cylinderPositionAttribute.count; cylinderVertexIndex += 1) {
+        cylinderVertex.fromBufferAttribute(cylinderPositionAttribute, cylinderVertexIndex);
+        const originalRadius = Math.sqrt(cylinderVertex.x * cylinderVertex.x + cylinderVertex.z * cylinderVertex.z);
+        if (originalRadius < 0.0001) {
+          continue;
+        }
+
+        const angularPosition = Math.atan2(cylinderVertex.z, cylinderVertex.x);
+        const fluteWave = Math.max(0, Math.cos(angularPosition * fluteCount));
+        const adjustedRadius = originalRadius - Math.pow(fluteWave, 2.3) * fluteDepth;
+        const radialScale = adjustedRadius / originalRadius;
+        cylinderVertex.x *= radialScale;
+        cylinderVertex.z *= radialScale;
+        cylinderPositionAttribute.setXYZ(cylinderVertexIndex, cylinderVertex.x, cylinderVertex.y, cylinderVertex.z);
+      }
+
+      flutedCylinderGeometry.computeVertexNormals();
+      return flutedCylinderGeometry;
+    }
+
+    function createPedimentMesh(totalWidth, totalHeight, totalDepth, pedimentMaterial) {
+      const pedimentShape = new THREE.Shape();
+      pedimentShape.moveTo(-totalWidth / 2, -totalHeight / 2);
+      pedimentShape.lineTo(totalWidth / 2, -totalHeight / 2);
+      pedimentShape.lineTo(0, totalHeight / 2);
+      pedimentShape.closePath();
+
+      const pedimentGeometry = new THREE.ExtrudeGeometry(pedimentShape, {
+        depth: totalDepth,
+        bevelEnabled: false,
+      });
+      pedimentGeometry.center();
+      pedimentGeometry.translate(0, 0, totalDepth * 0.5);
+
+      return new THREE.Mesh(pedimentGeometry, pedimentMaterial);
+    }
+
+    function createBrokenPedimentMesh(segmentWidth, segmentHeight, segmentDepth, segmentSide, pedimentMaterial) {
+      const brokenShape = new THREE.Shape();
+      if (segmentSide === 'left') {
+        brokenShape.moveTo(-segmentWidth / 2, -segmentHeight / 2);
+        brokenShape.lineTo(segmentWidth / 2, -segmentHeight / 2);
+        brokenShape.lineTo(segmentWidth / 2, segmentHeight * 0.42);
+        brokenShape.lineTo(segmentWidth * 0.08, segmentHeight / 2);
+        brokenShape.closePath();
+      } else {
+        brokenShape.moveTo(-segmentWidth / 2, segmentHeight * 0.42);
+        brokenShape.lineTo(-segmentWidth * 0.08, segmentHeight / 2);
+        brokenShape.lineTo(segmentWidth / 2, -segmentHeight / 2);
+        brokenShape.lineTo(-segmentWidth / 2, -segmentHeight / 2);
+        brokenShape.closePath();
+      }
+
+      const brokenGeometry = new THREE.ExtrudeGeometry(brokenShape, {
+        depth: segmentDepth,
+        bevelEnabled: false,
+      });
+      brokenGeometry.center();
+      brokenGeometry.translate(0, 0, segmentDepth * 0.5);
+      return new THREE.Mesh(brokenGeometry, pedimentMaterial);
+    }
+
+    function createReliefPanel(materialLibraryObject) {
+      const reliefPanelGroup = new THREE.Group();
+
+      const reliefPanelMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.95, 5.4, 0.24),
+        materialLibraryObject.treasuryAccentMaterial,
+      );
+      reliefPanelMesh.position.set(0, 0, 0);
+      reliefPanelMesh.castShadow = true;
+      reliefPanelMesh.receiveShadow = true;
+      reliefPanelGroup.add(reliefPanelMesh);
+
+      const reliefHeadMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.26, 14, 10),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      reliefHeadMesh.scale.set(1, 1.1, 0.52);
+      reliefHeadMesh.position.set(0, 1.72, 0.18);
+      reliefHeadMesh.castShadow = true;
+      reliefHeadMesh.receiveShadow = true;
+      reliefPanelGroup.add(reliefHeadMesh);
+
+      const reliefTorsoMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.46, 1.68, 0.18),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      reliefTorsoMesh.position.set(0, 0.48, 0.16);
+      reliefTorsoMesh.castShadow = true;
+      reliefTorsoMesh.receiveShadow = true;
+      reliefPanelGroup.add(reliefTorsoMesh);
+
+      const reliefLegMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.24, 1.35, 0.14),
+        materialLibraryObject.treasuryStoneMaterial,
+      );
+      reliefLegMesh.position.set(0, -1.15, 0.14);
+      reliefLegMesh.castShadow = true;
+      reliefLegMesh.receiveShadow = true;
+      reliefPanelGroup.add(reliefLegMesh);
+
+      return reliefPanelGroup;
+    }
+
+    function addDentilBand(parentGroup, spanWidth, dentilCount, bandHeight, bandDepth, dentilMaterial) {
+      const dentilSpacing = spanWidth / Math.max(1, dentilCount - 1);
+      for (let dentilIndex = 0; dentilIndex < dentilCount; dentilIndex += 1) {
+        const dentilMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.36, 0.22, 0.26),
+          dentilMaterial,
+        );
+        dentilMesh.position.set(-spanWidth / 2 + dentilIndex * dentilSpacing, bandHeight, bandDepth);
+        dentilMesh.castShadow = true;
+        dentilMesh.receiveShadow = true;
+        parentGroup.add(dentilMesh);
+      }
+    }
+
+    function addReliefRosettes(parentGroup, spanWidth, rosetteCount, bandHeight, bandDepth, rosetteMaterial) {
+      const rosetteSpacing = spanWidth / Math.max(1, rosetteCount - 1);
+      for (let rosetteIndex = 0; rosetteIndex < rosetteCount; rosetteIndex += 1) {
+        const rosetteMesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.22, 0.22, 0.2, 10),
+          rosetteMaterial,
+        );
+        rosetteMesh.rotation.x = Math.PI / 2;
+        rosetteMesh.position.set(-spanWidth / 2 + rosetteIndex * rosetteSpacing, bandHeight, bandDepth);
+        rosetteMesh.castShadow = true;
+        rosetteMesh.receiveShadow = true;
+        parentGroup.add(rosetteMesh);
+      }
+    }
+
+    function createScaleReferenceGroup(materialLibraryObject) {
+      const scaleReferenceGroup = new THREE.Group();
+
+      const leftHumanGroup = createHumanFigure(materialLibraryObject, 1.78);
+      leftHumanGroup.position.set(-9.8, 0, 15.6);
+      scaleReferenceGroup.add(leftHumanGroup);
+
+      const centerHumanGroup = createHumanFigure(materialLibraryObject, 1.7);
+      centerHumanGroup.position.set(-7.4, 0, 15.1);
+      centerHumanGroup.rotation.y = 0.5;
+      scaleReferenceGroup.add(centerHumanGroup);
+
+      const camelGroup = createCamelFigure(materialLibraryObject);
+      camelGroup.position.set(10.4, 0, 18.4);
+      camelGroup.rotation.y = -0.28;
+      scaleReferenceGroup.add(camelGroup);
+
+      return scaleReferenceGroup;
+    }
+
+    function createHumanFigure(materialLibraryObject, figureHeight) {
+      const humanFigureGroup = new THREE.Group();
+
+      const robeMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(figureHeight * 0.16, figureHeight * 0.22, figureHeight * 0.65, 10),
+        materialLibraryObject.clothMaterial,
+      );
+      robeMesh.position.set(0, figureHeight * 0.33, 0);
+      robeMesh.castShadow = true;
+      robeMesh.receiveShadow = true;
+      humanFigureGroup.add(robeMesh);
+
+      const torsoMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(figureHeight * 0.18, figureHeight * 0.24, figureHeight * 0.1),
+        materialLibraryObject.figureMaterial,
+      );
+      torsoMesh.position.set(0, figureHeight * 0.63, 0);
+      torsoMesh.castShadow = true;
+      torsoMesh.receiveShadow = true;
+      humanFigureGroup.add(torsoMesh);
+
+      const headMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(figureHeight * 0.09, 14, 10),
+        materialLibraryObject.figureMaterial,
+      );
+      headMesh.position.set(0, figureHeight * 0.83, 0);
+      headMesh.castShadow = true;
+      headMesh.receiveShadow = true;
+      humanFigureGroup.add(headMesh);
+
+      return humanFigureGroup;
+    }
+
+    function createCamelFigure(materialLibraryObject) {
+      const camelFigureGroup = new THREE.Group();
+
+      const bodyMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(3.2, 1.45, 1.15),
+        materialLibraryObject.camelMaterial,
+      );
+      bodyMesh.position.set(0, 2.15, 0);
+      bodyMesh.castShadow = true;
+      bodyMesh.receiveShadow = true;
+      camelFigureGroup.add(bodyMesh);
+
+      const frontHumpMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.7, 16, 12),
+        materialLibraryObject.camelMaterial,
+      );
+      frontHumpMesh.scale.set(1, 0.92, 0.84);
+      frontHumpMesh.position.set(-0.42, 2.78, 0);
+      frontHumpMesh.castShadow = true;
+      frontHumpMesh.receiveShadow = true;
+      camelFigureGroup.add(frontHumpMesh);
+
+      const rearHumpMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.62, 16, 12),
+        materialLibraryObject.camelMaterial,
+      );
+      rearHumpMesh.scale.set(1, 0.88, 0.8);
+      rearHumpMesh.position.set(0.52, 2.68, 0);
+      rearHumpMesh.castShadow = true;
+      rearHumpMesh.receiveShadow = true;
+      camelFigureGroup.add(rearHumpMesh);
+
+      const neckMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.22, 0.28, 1.7, 10),
+        materialLibraryObject.camelMaterial,
+      );
+      neckMesh.position.set(-1.48, 2.95, 0);
+      neckMesh.rotation.z = -0.45;
+      neckMesh.castShadow = true;
+      neckMesh.receiveShadow = true;
+      camelFigureGroup.add(neckMesh);
+
+      const headMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.72, 0.4, 0.34),
+        materialLibraryObject.camelMaterial,
+      );
+      headMesh.position.set(-2.12, 3.45, 0);
+      headMesh.rotation.z = -0.18;
+      headMesh.castShadow = true;
+      headMesh.receiveShadow = true;
+      camelFigureGroup.add(headMesh);
+
+      const legOffsets = [-1.05, -0.3, 0.42, 1.08];
+      legOffsets.forEach((legOffset) => {
+        const legMesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.09, 0.12, 2.05, 8),
+          materialLibraryObject.camelMaterial,
+        );
+        legMesh.position.set(legOffset, 1.05, legOffset < 0 ? -0.22 : 0.18);
+        legMesh.castShadow = true;
+        legMesh.receiveShadow = true;
+        camelFigureGroup.add(legMesh);
+      });
+
+      return camelFigureGroup;
+    }
+
+    function clampValue(sampleValue, minimumValue, maximumValue) {
+      return Math.min(maximumValue, Math.max(minimumValue, sampleValue));
+    }
+
+    function lerpValue(startValue, endValue, interpolationAmount) {
+      return startValue + (endValue - startValue) * interpolationAmount;
+    }
+
+    function inverseLerpValue(startValue, endValue, sampleValue) {
+      if (endValue === startValue) {
+        return 0;
+      }
+      return clampValue((sampleValue - startValue) / (endValue - startValue), 0, 1);
+    }
+
+    function smoothstepValue(edgeStart, edgeEnd, sampleValue) {
+      const normalizedValue = inverseLerpValue(edgeStart, edgeEnd, sampleValue);
+      return normalizedValue * normalizedValue * (3 - 2 * normalizedValue);
+    }
+
+    function fractValue(sampleValue) {
+      return sampleValue - Math.floor(sampleValue);
+    }
+
+    function pseudoRandomFromCoordinates(sampleXValue, sampleYValue, seedOffsetValue) {
+      return fractValue(
+        Math.sin(sampleXValue * 127.1 + sampleYValue * 311.7 + seedOffsetValue * 74.7) * 43758.5453123,
+      );
+    }
+
+    function layeredRockNoise(sampleXValue, sampleYValue, seedOffsetValue) {
+      const coarseNoise = pseudoRandomFromCoordinates(sampleXValue, sampleYValue, seedOffsetValue) * 2 - 1;
+      const mediumNoise = pseudoRandomFromCoordinates(sampleXValue * 2.1, sampleYValue * 2.1, seedOffsetValue + 1.3) * 2 - 1;
+      const fineNoise = pseudoRandomFromCoordinates(sampleXValue * 4.6, sampleYValue * 4.6, seedOffsetValue + 2.7) * 2 - 1;
+      const waveNoise = Math.sin(sampleXValue * 1.7 + sampleYValue * 0.8 + seedOffsetValue * 0.5) * 0.4;
+      return coarseNoise * 0.55 + mediumNoise * 0.3 + fineNoise * 0.15 + waveNoise;
+    }
+  </script>
+</body>
+</html>

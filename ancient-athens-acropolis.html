@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ancient Athens — Acropolis</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --panel-bg: rgba(16, 19, 24, 0.5);
+      --panel-border: rgba(255, 255, 255, 0.14);
+      --panel-text: #f5efe4;
+      --accent: #d8ba82;
+      --accent-strong: #f1d096;
+      --shadow: rgba(0, 0, 0, 0.28);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: linear-gradient(180deg, #6fa0e0 0%, #a9c8ee 38%, #d7e2ef 62%, #f5ead8 100%);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #scene-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #ui-panel {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      width: min(280px, calc(100vw - 24px));
+      padding: 11px 12px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--panel-border);
+      background: var(--panel-bg);
+      color: var(--panel-text);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 26px var(--shadow);
+      user-select: none;
+    }
+
+    #ui-title {
+      margin: 0 0 8px;
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent-strong);
+    }
+
+    .ui-row {
+      display: grid;
+      grid-template-columns: 74px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .ui-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .ui-label {
+      color: rgba(255, 247, 232, 0.95);
+    }
+
+    .ui-value {
+      min-width: 54px;
+      text-align: right;
+      color: var(--accent-strong);
+      font-variant-numeric: tabular-nums;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
+    input[type="checkbox"] {
+      accent-color: var(--accent);
+    }
+
+    #camera-select {
+      width: 100%;
+      padding: 5px 7px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--panel-text);
+      outline: none;
+    }
+
+    #camera-select option {
+      color: #111;
+    }
+
+    #crowd-checkbox-row {
+      grid-template-columns: 74px auto 1fr;
+    }
+
+    #crowd-checkbox {
+      margin: 0;
+    }
+
+    #hint-text {
+      margin-top: 8px;
+      font-size: 11px;
+      color: rgba(255, 243, 222, 0.72);
+      letter-spacing: 0.01em;
+    }
+
+    #fps-badge {
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(16, 19, 24, 0.42);
+      color: #f8f0df;
+      backdrop-filter: blur(12px);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+    }
+
+    @media (max-width: 720px) {
+      #ui-panel {
+        width: min(300px, calc(100vw - 16px));
+        top: 8px;
+        left: 8px;
+        padding: 10px;
+      }
+
+      #fps-badge {
+        top: auto;
+        bottom: 8px;
+        right: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scene-canvas" aria-label="Ancient Athens Acropolis scene"></canvas>
+
+  <div id="ui-panel">
+    <h1 id="ui-title">Acropolis — Ancient Athens</h1>
+
+    <div class="ui-row">
+      <div class="ui-label">Time</div>
+      <input id="time-slider" type="range" min="0" max="1" step="0.001" value="0.72" />
+      <div id="time-value" class="ui-value">Golden hour</div>
+    </div>
+
+    <div class="ui-row">
+      <div class="ui-label">Haze</div>
+      <input id="haze-slider" type="range" min="0" max="1" step="0.001" value="0.34" />
+      <div id="haze-value" class="ui-value">34%</div>
+    </div>
+
+    <div class="ui-row" id="crowd-checkbox-row">
+      <div class="ui-label">Crowd</div>
+      <input id="crowd-checkbox" type="checkbox" checked />
+      <div class="ui-value" id="crowd-state-value">On</div>
+    </div>
+
+    <div class="ui-row">
+      <div class="ui-label">Density</div>
+      <input id="crowd-density-slider" type="range" min="0" max="1" step="0.001" value="0.42" />
+      <div id="crowd-density-value" class="ui-value">42%</div>
+    </div>
+
+    <div class="ui-row">
+      <div class="ui-label">Camera</div>
+      <select id="camera-select">
+        <option value="postcard" selected>Classic postcard</option>
+        <option value="inspection">Close inspection</option>
+        <option value="flyover">Flyover path</option>
+      </select>
+      <div id="camera-value" class="ui-value">View</div>
+    </div>
+
+    <div id="hint-text">Drag to orbit in postcard and inspection views.</div>
+  </div>
+
+  <div id="fps-badge">FPS --</div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three'
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+    import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+
+    const sceneCanvasElement = document.getElementById('scene-canvas')
+    const timeSliderElement = document.getElementById('time-slider')
+    const timeValueElement = document.getElementById('time-value')
+    const hazeSliderElement = document.getElementById('haze-slider')
+    const hazeValueElement = document.getElementById('haze-value')
+    const crowdCheckboxElement = document.getElementById('crowd-checkbox')
+    const crowdStateValueElement = document.getElementById('crowd-state-value')
+    const crowdDensitySliderElement = document.getElementById('crowd-density-slider')
+    const crowdDensityValueElement = document.getElementById('crowd-density-value')
+    const cameraSelectElement = document.getElementById('camera-select')
+    const cameraValueElement = document.getElementById('camera-value')
+    const fpsBadgeElement = document.getElementById('fps-badge')
+
+    const acropolisScene = new THREE.Scene()
+    const viewportRenderer = new THREE.WebGLRenderer({ canvas: sceneCanvasElement, antialias: true })
+    viewportRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    viewportRenderer.setSize(window.innerWidth, window.innerHeight)
+    viewportRenderer.outputColorSpace = THREE.SRGBColorSpace
+    viewportRenderer.toneMapping = THREE.ACESFilmicToneMapping
+    viewportRenderer.toneMappingExposure = 1.08
+    viewportRenderer.shadowMap.enabled = true
+    viewportRenderer.shadowMap.type = THREE.PCFShadowMap
+
+    const mainCamera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1200)
+    mainCamera.position.set(-158, 92, 176)
+
+    const orbitController = new OrbitControls(mainCamera, viewportRenderer.domElement)
+    orbitController.enableDamping = true
+    orbitController.enablePan = false
+    orbitController.minDistance = 34
+    orbitController.maxDistance = 320
+    orbitController.maxPolarAngle = Math.PI * 0.485
+    orbitController.target.set(2, 61, 4)
+
+    const acropolisFogColor = new THREE.Color(0xa8bfd7)
+    acropolisScene.fog = new THREE.Fog(acropolisFogColor, 160, 450)
+    acropolisScene.background = acropolisFogColor.clone()
+
+    const rootGroup = new THREE.Group()
+    acropolisScene.add(rootGroup)
+
+    const terrainGroup = new THREE.Group()
+    const templeGroup = new THREE.Group()
+    const vegetationGroup = new THREE.Group()
+    const cityGroup = new THREE.Group()
+    const pathGroup = new THREE.Group()
+    const crowdGroup = new THREE.Group()
+    rootGroup.add(terrainGroup, cityGroup, vegetationGroup, pathGroup, templeGroup, crowdGroup)
+
+    const hemisphereLight = new THREE.HemisphereLight(0xcfe0ff, 0xc4a67a, 1.55)
+    acropolisScene.add(hemisphereLight)
+
+    const fillLight = new THREE.DirectionalLight(0xcfdfff, 0.25)
+    fillLight.position.set(-80, 110, -90)
+    acropolisScene.add(fillLight)
+
+    const sunLight = new THREE.DirectionalLight(0xffe3b4, 2.6)
+    sunLight.position.set(140, 88, 64)
+    sunLight.castShadow = true
+    sunLight.shadow.mapSize.set(2048, 2048)
+    sunLight.shadow.camera.left = -125
+    sunLight.shadow.camera.right = 125
+    sunLight.shadow.camera.top = 125
+    sunLight.shadow.camera.bottom = -125
+    sunLight.shadow.camera.near = 30
+    sunLight.shadow.camera.far = 360
+    sunLight.shadow.bias = -0.0007
+    sunLight.shadow.normalBias = 0.025
+    sunLight.shadow.radius = 1.8
+    acropolisScene.add(sunLight)
+
+    const sunTargetObject = new THREE.Object3D()
+    sunTargetObject.position.set(0, 60, 0)
+    acropolisScene.add(sunTargetObject)
+    sunLight.target = sunTargetObject
+
+    const skyUniforms = {
+      topColor: { value: new THREE.Color(0x6ca8ff) },
+      horizonColor: { value: new THREE.Color(0xd9e6ff) },
+      groundColor: { value: new THREE.Color(0xf4dcc0) }
+    }
+
+    const skyDomeMaterial = new THREE.ShaderMaterial({
+      uniforms: skyUniforms,
+      vertexShader: `
+        varying vec3 skyWorldPosition;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          skyWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 horizonColor;
+        uniform vec3 groundColor;
+        varying vec3 skyWorldPosition;
+        void main() {
+          float verticalBlend = normalize(skyWorldPosition).y * 0.5 + 0.5;
+          float horizonBand = exp(-pow(abs(verticalBlend - 0.5) * 7.0, 1.28));
+          vec3 lowerColor = mix(groundColor, horizonColor, smoothstep(0.02, 0.48, verticalBlend));
+          vec3 upperColor = mix(horizonColor, topColor, smoothstep(0.46, 0.98, verticalBlend));
+          vec3 finalColor = mix(lowerColor, upperColor, smoothstep(0.38, 0.62, verticalBlend));
+          finalColor += horizonBand * 0.05;
+          gl_FragColor = vec4(finalColor, 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      depthWrite: false
+    })
+
+    const skyDomeGeometry = new THREE.SphereGeometry(900, 32, 18)
+    const skyDomeMesh = new THREE.Mesh(skyDomeGeometry, skyDomeMaterial)
+    acropolisScene.add(skyDomeMesh)
+
+    const sharedTemporaryMatrix = new THREE.Matrix4()
+    const sharedTemporaryQuaternion = new THREE.Quaternion()
+    const sharedTemporaryEuler = new THREE.Euler()
+    const sharedTemporaryScale = new THREE.Vector3()
+    const sharedTemporaryVector = new THREE.Vector3()
+    const sharedSecondaryVector = new THREE.Vector3()
+    const sharedColorA = new THREE.Color()
+    const sharedColorB = new THREE.Color()
+    const sharedColorC = new THREE.Color()
+
+    function createSeededRandom(seedValue) {
+      let workingSeed = seedValue >>> 0
+      return function generateSeededValue() {
+        workingSeed += 0x6D2B79F5
+        let scrambledValue = Math.imul(workingSeed ^ (workingSeed >>> 15), 1 | workingSeed)
+        scrambledValue ^= scrambledValue + Math.imul(scrambledValue ^ (scrambledValue >>> 7), 61 | scrambledValue)
+        return ((scrambledValue ^ (scrambledValue >>> 14)) >>> 0) / 4294967296
+      }
+    }
+
+    function clampValue(valueNumber, minimumValue, maximumValue) {
+      return Math.min(maximumValue, Math.max(minimumValue, valueNumber))
+    }
+
+    function smoothstepValue(edgeStart, edgeEnd, inputValue) {
+      const normalizedValue = clampValue((inputValue - edgeStart) / (edgeEnd - edgeStart), 0, 1)
+      return normalizedValue * normalizedValue * (3 - 2 * normalizedValue)
+    }
+
+    function ridgeNoise(sampleX, sampleZ) {
+      const firstWave = Math.sin(sampleX * 0.13) * Math.cos(sampleZ * 0.11) * 1.7
+      const secondWave = Math.sin((sampleX + sampleZ) * 0.064 + Math.cos(sampleZ * 0.041) * 2.2) * 1.2
+      const thirdWave = Math.cos(sampleZ * 0.19 - sampleX * 0.053) * 0.72
+      const fourthWave = Math.sin((sampleX * 0.031) - (sampleZ * 0.028)) * 1.35
+      return firstWave + secondWave + thirdWave + fourthWave
+    }
+
+    const ascentPolylinePoints = [
+      new THREE.Vector2(-146, 170),
+      new THREE.Vector2(-124, 152),
+      new THREE.Vector2(-101, 131),
+      new THREE.Vector2(-78, 108),
+      new THREE.Vector2(-57, 88),
+      new THREE.Vector2(-36, 66),
+      new THREE.Vector2(-18, 46),
+      new THREE.Vector2(-6, 28),
+      new THREE.Vector2(2, 12)
+    ]
+
+    const ascentPathCurve = new THREE.CatmullRomCurve3(
+      ascentPolylinePoints.map(function mapPolylineToCurve(polylinePoint) {
+        return new THREE.Vector3(polylinePoint.x, 0, polylinePoint.y)
+      }),
+      false,
+      'centripetal'
+    )
+
+    function distanceToLineSegment(samplePoint, segmentStartPoint, segmentEndPoint) {
+      const segmentVectorX = segmentEndPoint.x - segmentStartPoint.x
+      const segmentVectorZ = segmentEndPoint.y - segmentStartPoint.y
+      const pointVectorX = samplePoint.x - segmentStartPoint.x
+      const pointVectorZ = samplePoint.y - segmentStartPoint.y
+      const projectionDenominator = (segmentVectorX * segmentVectorX) + (segmentVectorZ * segmentVectorZ)
+
+      if (projectionDenominator === 0) {
+        return Math.hypot(pointVectorX, pointVectorZ)
+      }
+
+      const projectionFactor = clampValue(((pointVectorX * segmentVectorX) + (pointVectorZ * segmentVectorZ)) / projectionDenominator, 0, 1)
+      const closestPointX = segmentStartPoint.x + (segmentVectorX * projectionFactor)
+      const closestPointZ = segmentStartPoint.y + (segmentVectorZ * projectionFactor)
+      return Math.hypot(samplePoint.x - closestPointX, samplePoint.y - closestPointZ)
+    }
+
+    function samplePolylineDistance(sampleX, sampleZ, polylinePoints) {
+      const distanceQueryPoint = new THREE.Vector2(sampleX, sampleZ)
+      let nearestDistance = Infinity
+
+      for (let polylineSegmentIndex = 0; polylineSegmentIndex < polylinePoints.length - 1; polylineSegmentIndex += 1) {
+        const segmentStartPoint = polylinePoints[polylineSegmentIndex]
+        const segmentEndPoint = polylinePoints[polylineSegmentIndex + 1]
+        const segmentDistance = distanceToLineSegment(distanceQueryPoint, segmentStartPoint, segmentEndPoint)
+        if (segmentDistance < nearestDistance) {
+          nearestDistance = segmentDistance
+        }
+      }
+
+      return nearestDistance
+    }
+
+    function sampleTerrainHeight(sampleX, sampleZ) {
+      const plateauDistance = Math.sqrt((sampleX / 78) ** 2 + ((sampleZ + 6) / 96) ** 2)
+      const plateauMask = 1 - smoothstepValue(0.72, 1.06, plateauDistance)
+      const innerPlateauDistance = Math.sqrt((sampleX / 55) ** 2 + ((sampleZ + 2) / 49) ** 2)
+      const innerPlateauMask = 1 - smoothstepValue(0.58, 0.82, innerPlateauDistance)
+      const outerPlainDistance = Math.sqrt((sampleX / 200) ** 2 + ((sampleZ / 205) ** 2))
+      const hillsideNoise = ridgeNoise(sampleX, sampleZ)
+      const secondaryNoise = ridgeNoise(sampleX * 0.61, sampleZ * 0.61)
+      let terrainElevation = 2.4 + ((1 - clampValue(outerPlainDistance, 0, 1)) * 3.8)
+      terrainElevation += plateauMask * 48.5
+      terrainElevation += hillsideNoise * (0.35 + ((1 - plateauMask) * 0.2) + (plateauMask * 0.9))
+      terrainElevation += secondaryNoise * (0.18 + plateauMask * 0.24)
+      terrainElevation = THREE.MathUtils.lerp(terrainElevation, 58.4 + ridgeNoise(sampleX * 0.38, sampleZ * 0.38) * 0.42, innerPlateauMask)
+      const cliffMask = smoothstepValue(0.74, 1.02, plateauDistance)
+      terrainElevation -= cliffMask * (4.6 + Math.abs(hillsideNoise) * 0.9)
+      return terrainElevation
+    }
+
+    function sampleTerrainSlope(sampleX, sampleZ) {
+      const sampleOffset = 1.5
+      const westHeight = sampleTerrainHeight(sampleX - sampleOffset, sampleZ)
+      const eastHeight = sampleTerrainHeight(sampleX + sampleOffset, sampleZ)
+      const southHeight = sampleTerrainHeight(sampleX, sampleZ - sampleOffset)
+      const northHeight = sampleTerrainHeight(sampleX, sampleZ + sampleOffset)
+      const slopeX = (eastHeight - westHeight) / (sampleOffset * 2)
+      const slopeZ = (northHeight - southHeight) / (sampleOffset * 2)
+      return Math.sqrt((slopeX * slopeX) + (slopeZ * slopeZ))
+    }
+
+    function sampleTerrainNormal(sampleX, sampleZ) {
+      const sampleOffset = 1.4
+      const westHeight = sampleTerrainHeight(sampleX - sampleOffset, sampleZ)
+      const eastHeight = sampleTerrainHeight(sampleX + sampleOffset, sampleZ)
+      const southHeight = sampleTerrainHeight(sampleX, sampleZ - sampleOffset)
+      const northHeight = sampleTerrainHeight(sampleX, sampleZ + sampleOffset)
+      return new THREE.Vector3(westHeight - eastHeight, sampleOffset * 2, southHeight - northHeight).normalize()
+    }
+
+    function createMarbleTextureSet() {
+      const marbleCanvasSize = 256
+      const marbleDiffuseCanvas = document.createElement('canvas')
+      marbleDiffuseCanvas.width = marbleCanvasSize
+      marbleDiffuseCanvas.height = marbleCanvasSize
+      const marbleDiffuseContext = marbleDiffuseCanvas.getContext('2d')
+      const marbleDiffuseImage = marbleDiffuseContext.createImageData(marbleCanvasSize, marbleCanvasSize)
+
+      const marbleBumpCanvas = document.createElement('canvas')
+      marbleBumpCanvas.width = marbleCanvasSize
+      marbleBumpCanvas.height = marbleCanvasSize
+      const marbleBumpContext = marbleBumpCanvas.getContext('2d')
+      const marbleBumpImage = marbleBumpContext.createImageData(marbleCanvasSize, marbleCanvasSize)
+
+      for (let marblePixelY = 0; marblePixelY < marbleCanvasSize; marblePixelY += 1) {
+        for (let marblePixelX = 0; marblePixelX < marbleCanvasSize; marblePixelX += 1) {
+          const marbleIndex = (marblePixelY * marbleCanvasSize + marblePixelX) * 4
+          const normalizedX = marblePixelX / marbleCanvasSize
+          const normalizedY = marblePixelY / marbleCanvasSize
+          const veinSignal = Math.sin(normalizedX * 18.5 + normalizedY * 7.2 + Math.sin(normalizedY * 21.5) * 1.8)
+          const cloudSignal = Math.sin((normalizedX * 41.3) + (normalizedY * 27.7)) * 0.5
+            + Math.cos((normalizedX * 16.2) - (normalizedY * 33.7)) * 0.5
+          const crystallineSignal = Math.sin((normalizedX + normalizedY) * 85.0) * 0.15
+          const marbleValue = 236 + veinSignal * 4.8 + cloudSignal * 5.4 + crystallineSignal * 3.0
+          const diffuseRed = clampValue(Math.round(marbleValue + 7), 0, 255)
+          const diffuseGreen = clampValue(Math.round(marbleValue + 3), 0, 255)
+          const diffuseBlue = clampValue(Math.round(marbleValue - 2), 0, 255)
+          marbleDiffuseImage.data[marbleIndex] = diffuseRed
+          marbleDiffuseImage.data[marbleIndex + 1] = diffuseGreen
+          marbleDiffuseImage.data[marbleIndex + 2] = diffuseBlue
+          marbleDiffuseImage.data[marbleIndex + 3] = 255
+
+          const bumpValue = clampValue(Math.round(118 + veinSignal * 24 + cloudSignal * 18 + crystallineSignal * 14), 0, 255)
+          marbleBumpImage.data[marbleIndex] = bumpValue
+          marbleBumpImage.data[marbleIndex + 1] = bumpValue
+          marbleBumpImage.data[marbleIndex + 2] = bumpValue
+          marbleBumpImage.data[marbleIndex + 3] = 255
+        }
+      }
+
+      marbleDiffuseContext.putImageData(marbleDiffuseImage, 0, 0)
+      marbleBumpContext.putImageData(marbleBumpImage, 0, 0)
+
+      const marbleDiffuseTexture = new THREE.CanvasTexture(marbleDiffuseCanvas)
+      marbleDiffuseTexture.colorSpace = THREE.SRGBColorSpace
+      marbleDiffuseTexture.wrapS = THREE.RepeatWrapping
+      marbleDiffuseTexture.wrapT = THREE.RepeatWrapping
+      marbleDiffuseTexture.anisotropy = viewportRenderer.capabilities.getMaxAnisotropy()
+
+      const marbleBumpTexture = new THREE.CanvasTexture(marbleBumpCanvas)
+      marbleBumpTexture.wrapS = THREE.RepeatWrapping
+      marbleBumpTexture.wrapT = THREE.RepeatWrapping
+      marbleBumpTexture.anisotropy = viewportRenderer.capabilities.getMaxAnisotropy()
+
+      return {
+        diffuseTexture: marbleDiffuseTexture,
+        bumpTexture: marbleBumpTexture
+      }
+    }
+
+    const marbleTextureSet = createMarbleTextureSet()
+    marbleTextureSet.diffuseTexture.repeat.set(3.5, 2.4)
+    marbleTextureSet.bumpTexture.repeat.set(3.5, 2.4)
+
+    const marbleMaterial = new THREE.MeshStandardMaterial({
+      color: 0xf2e6d0,
+      map: marbleTextureSet.diffuseTexture,
+      bumpMap: marbleTextureSet.bumpTexture,
+      bumpScale: 0.08,
+      roughness: 0.82,
+      metalness: 0.0
+    })
+
+    const roofMarbleMaterial = new THREE.MeshStandardMaterial({
+      color: 0xe6d8bf,
+      map: marbleTextureSet.diffuseTexture,
+      bumpMap: marbleTextureSet.bumpTexture,
+      bumpScale: 0.06,
+      roughness: 0.88,
+      metalness: 0.0
+    })
+
+    const terrainGeometry = new THREE.PlaneGeometry(460, 460, 170, 170)
+    terrainGeometry.rotateX(-Math.PI / 2)
+    const terrainPositionAttribute = terrainGeometry.attributes.position
+    const terrainVertexColorValues = []
+
+    for (let terrainVertexIndex = 0; terrainVertexIndex < terrainPositionAttribute.count; terrainVertexIndex += 1) {
+      const terrainVertexX = terrainPositionAttribute.getX(terrainVertexIndex)
+      const terrainVertexZ = terrainPositionAttribute.getZ(terrainVertexIndex)
+      const terrainVertexElevation = sampleTerrainHeight(terrainVertexX, terrainVertexZ)
+      terrainPositionAttribute.setY(terrainVertexIndex, terrainVertexElevation)
+
+      const terrainPlateauDistance = Math.sqrt((terrainVertexX / 82) ** 2 + ((terrainVertexZ + 7) / 100) ** 2)
+      const terrainPlateauMask = 1 - smoothstepValue(0.74, 1.1, terrainPlateauDistance)
+      const terrainPathDistance = samplePolylineDistance(terrainVertexX, terrainVertexZ, ascentPolylinePoints)
+      const terrainPathMask = 1 - smoothstepValue(4, 14, terrainPathDistance)
+      const terrainSlopeValue = sampleTerrainSlope(terrainVertexX, terrainVertexZ)
+      const terrainSlopeMask = smoothstepValue(0.55, 2.2, terrainSlopeValue)
+      const terraceDustMask = 1 - smoothstepValue(0.58, 0.85, Math.sqrt((terrainVertexX / 62) ** 2 + ((terrainVertexZ + 2) / 58) ** 2))
+
+      const redChannel = clampValue(0.46 + terrainPlateauMask * 0.18 + terrainPathMask * 0.16 + terraceDustMask * 0.05 + terrainSlopeMask * 0.07, 0, 1)
+      const greenChannel = clampValue(0.40 + terrainPlateauMask * 0.18 + terrainPathMask * 0.13 + terraceDustMask * 0.04 + terrainSlopeMask * 0.05, 0, 1)
+      const blueChannel = clampValue(0.31 + terrainPlateauMask * 0.14 + terrainPathMask * 0.08 + terraceDustMask * 0.03 + terrainSlopeMask * 0.04, 0, 1)
+
+      terrainVertexColorValues.push(redChannel, greenChannel, blueChannel)
+    }
+
+    terrainGeometry.setAttribute('color', new THREE.Float32BufferAttribute(terrainVertexColorValues, 3))
+    terrainGeometry.computeVertexNormals()
+
+    const terrainMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.98,
+      metalness: 0.0,
+      vertexColors: true
+    })
+
+    const terrainMesh = new THREE.Mesh(terrainGeometry, terrainMaterial)
+    terrainMesh.receiveShadow = true
+    terrainGroup.add(terrainMesh)
+
+    const lowerGroundGeometry = new THREE.CircleGeometry(360, 64)
+    lowerGroundGeometry.rotateX(-Math.PI / 2)
+    const lowerGroundMaterial = new THREE.MeshStandardMaterial({ color: 0x8b775e, roughness: 1, metalness: 0 })
+    const lowerGroundMesh = new THREE.Mesh(lowerGroundGeometry, lowerGroundMaterial)
+    lowerGroundMesh.position.y = 1.9
+    lowerGroundMesh.receiveShadow = true
+    terrainGroup.add(lowerGroundMesh)
+
+    function createFlutedColumnGeometry(columnHeight, lowerRadius, upperRadius) {
+      const shaftGeometry = new THREE.CylinderGeometry(upperRadius, lowerRadius, columnHeight, 24, 14, true)
+      const shaftPositionAttribute = shaftGeometry.attributes.position
+
+      for (let shaftVertexIndex = 0; shaftVertexIndex < shaftPositionAttribute.count; shaftVertexIndex += 1) {
+        const shaftVertexY = shaftPositionAttribute.getY(shaftVertexIndex)
+        const shaftVertexX = shaftPositionAttribute.getX(shaftVertexIndex)
+        const shaftVertexZ = shaftPositionAttribute.getZ(shaftVertexIndex)
+        const shaftRadialDistance = Math.sqrt((shaftVertexX * shaftVertexX) + (shaftVertexZ * shaftVertexZ))
+
+        if (shaftRadialDistance > 0.001) {
+          const shaftAngle = Math.atan2(shaftVertexZ, shaftVertexX)
+          const fluteDepth = Math.cos(shaftAngle * 12) * 0.085
+          const entasisFactor = Math.sin(((shaftVertexY / columnHeight) + 0.5) * Math.PI) * 0.05
+          const adjustedRadius = shaftRadialDistance + fluteDepth + entasisFactor
+          shaftPositionAttribute.setX(shaftVertexIndex, (shaftVertexX / shaftRadialDistance) * adjustedRadius)
+          shaftPositionAttribute.setZ(shaftVertexIndex, (shaftVertexZ / shaftRadialDistance) * adjustedRadius)
+        }
+      }
+
+      shaftGeometry.computeVertexNormals()
+
+      const columnBaseGeometry = new THREE.CylinderGeometry(lowerRadius * 1.28, lowerRadius * 1.38, 1.0, 24, 1, false)
+      columnBaseGeometry.translate(0, -(columnHeight * 0.5) - 0.5, 0)
+
+      const echinusGeometry = new THREE.CylinderGeometry(upperRadius * 1.42, upperRadius * 1.16, 0.8, 24, 1, false)
+      echinusGeometry.translate(0, (columnHeight * 0.5) + 0.25, 0)
+
+      const abacusGeometry = new THREE.BoxGeometry(upperRadius * 2.9, 0.45, upperRadius * 2.9)
+      abacusGeometry.translate(0, (columnHeight * 0.5) + 0.9, 0)
+
+      return mergeGeometries([shaftGeometry, columnBaseGeometry, echinusGeometry, abacusGeometry], true)
+    }
+
+    function createPedimentGeometry(pedimentSpan, pedimentRise, pedimentThickness) {
+      const pedimentShape = new THREE.Shape()
+      pedimentShape.moveTo(-pedimentSpan * 0.5, 0)
+      pedimentShape.lineTo(0, pedimentRise)
+      pedimentShape.lineTo(pedimentSpan * 0.5, 0)
+      pedimentShape.closePath()
+
+      const pedimentGeometry = new THREE.ExtrudeGeometry(pedimentShape, {
+        depth: pedimentThickness,
+        bevelEnabled: false
+      })
+
+      pedimentGeometry.rotateY(Math.PI / 2)
+      pedimentGeometry.translate(-pedimentThickness * 0.5, 0, 0)
+      return pedimentGeometry
+    }
+
+    function createTemple() {
+      const templeAssembly = new THREE.Group()
+      const stylobateBottomMesh = new THREE.Mesh(new THREE.BoxGeometry(82, 1.2, 40), marbleMaterial)
+      stylobateBottomMesh.position.y = 0.6
+      stylobateBottomMesh.castShadow = true
+      stylobateBottomMesh.receiveShadow = true
+      templeAssembly.add(stylobateBottomMesh)
+
+      const stylobateMiddleMesh = new THREE.Mesh(new THREE.BoxGeometry(78, 0.9, 36), marbleMaterial)
+      stylobateMiddleMesh.position.y = 1.65
+      stylobateMiddleMesh.castShadow = true
+      stylobateMiddleMesh.receiveShadow = true
+      templeAssembly.add(stylobateMiddleMesh)
+
+      const stylobateTopMesh = new THREE.Mesh(new THREE.BoxGeometry(74, 0.7, 32), marbleMaterial)
+      stylobateTopMesh.position.y = 2.45
+      stylobateTopMesh.castShadow = true
+      stylobateTopMesh.receiveShadow = true
+      templeAssembly.add(stylobateTopMesh)
+
+      const columnGeometry = createFlutedColumnGeometry(15.7, 1.45, 1.18)
+      columnGeometry.computeBoundingSphere()
+      marbleTextureSet.diffuseTexture.repeat.set(2.2, 2.6)
+      marbleTextureSet.bumpTexture.repeat.set(2.2, 2.6)
+
+      const columnMesh = new THREE.InstancedMesh(columnGeometry, marbleMaterial, 46)
+      columnMesh.castShadow = true
+      columnMesh.receiveShadow = true
+      columnMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
+      templeAssembly.add(columnMesh)
+
+      const columnCenterXValues = []
+      const longSideSpan = 62.4
+      const shortSideSpan = 25.6
+      for (let longSideIndex = 0; longSideIndex < 17; longSideIndex += 1) {
+        columnCenterXValues.push(-longSideSpan * 0.5 + (longSideSpan / 16) * longSideIndex)
+      }
+
+      const shortEndZValues = []
+      for (let shortEndIndex = 0; shortEndIndex < 8; shortEndIndex += 1) {
+        shortEndZValues.push(-shortSideSpan * 0.5 + (shortSideSpan / 7) * shortEndIndex)
+      }
+
+      let columnInstanceIndex = 0
+      const columnBaseElevation = 3.25
+      const columnHalfHeight = 8.35
+
+      for (let longSideColumnIndex = 0; longSideColumnIndex < columnCenterXValues.length; longSideColumnIndex += 1) {
+        const longSideColumnX = columnCenterXValues[longSideColumnIndex]
+
+        sharedTemporaryMatrix.compose(
+          new THREE.Vector3(longSideColumnX, columnBaseElevation + columnHalfHeight, -13.1),
+          new THREE.Quaternion(),
+          new THREE.Vector3(1, 1, 1)
+        )
+        columnMesh.setMatrixAt(columnInstanceIndex, sharedTemporaryMatrix)
+        columnInstanceIndex += 1
+
+        sharedTemporaryMatrix.compose(
+          new THREE.Vector3(longSideColumnX, columnBaseElevation + columnHalfHeight, 13.1),
+          new THREE.Quaternion(),
+          new THREE.Vector3(1, 1, 1)
+        )
+        columnMesh.setMatrixAt(columnInstanceIndex, sharedTemporaryMatrix)
+        columnInstanceIndex += 1
+      }
+
+      for (let endColumnIndex = 1; endColumnIndex < shortEndZValues.length - 1; endColumnIndex += 1) {
+        const shortEndColumnZ = shortEndZValues[endColumnIndex]
+
+        sharedTemporaryMatrix.compose(
+          new THREE.Vector3(-31.2, columnBaseElevation + columnHalfHeight, shortEndColumnZ),
+          new THREE.Quaternion(),
+          new THREE.Vector3(1, 1, 1)
+        )
+        columnMesh.setMatrixAt(columnInstanceIndex, sharedTemporaryMatrix)
+        columnInstanceIndex += 1
+
+        sharedTemporaryMatrix.compose(
+          new THREE.Vector3(31.2, columnBaseElevation + columnHalfHeight, shortEndColumnZ),
+          new THREE.Quaternion(),
+          new THREE.Vector3(1, 1, 1)
+        )
+        columnMesh.setMatrixAt(columnInstanceIndex, sharedTemporaryMatrix)
+        columnInstanceIndex += 1
+      }
+
+      columnMesh.instanceMatrix.needsUpdate = true
+
+      const cellaMesh = new THREE.Mesh(new THREE.BoxGeometry(48.4, 12.2, 18.5), marbleMaterial)
+      cellaMesh.position.y = 9.1
+      cellaMesh.castShadow = true
+      cellaMesh.receiveShadow = true
+      templeAssembly.add(cellaMesh)
+
+      const pronaosRecessMesh = new THREE.Mesh(new THREE.BoxGeometry(8.5, 9.5, 15.2), marbleMaterial)
+      pronaosRecessMesh.position.set(22.2, 8.6, 0)
+      pronaosRecessMesh.castShadow = true
+      pronaosRecessMesh.receiveShadow = true
+      templeAssembly.add(pronaosRecessMesh)
+
+      const opisthodomosRecessMesh = new THREE.Mesh(new THREE.BoxGeometry(7.8, 8.7, 15.0), marbleMaterial)
+      opisthodomosRecessMesh.position.set(-22.2, 8.2, 0)
+      opisthodomosRecessMesh.castShadow = true
+      opisthodomosRecessMesh.receiveShadow = true
+      templeAssembly.add(opisthodomosRecessMesh)
+
+      const architraveMesh = new THREE.Mesh(new THREE.BoxGeometry(70.8, 1.35, 29.8), marbleMaterial)
+      architraveMesh.position.y = 20.3
+      architraveMesh.castShadow = true
+      architraveMesh.receiveShadow = true
+      templeAssembly.add(architraveMesh)
+
+      const friezeMesh = new THREE.Mesh(new THREE.BoxGeometry(70.2, 1.25, 29.1), marbleMaterial)
+      friezeMesh.position.y = 21.62
+      friezeMesh.castShadow = true
+      friezeMesh.receiveShadow = true
+      templeAssembly.add(friezeMesh)
+
+      const corniceMesh = new THREE.Mesh(new THREE.BoxGeometry(71.8, 0.75, 30.6), marbleMaterial)
+      corniceMesh.position.y = 22.65
+      corniceMesh.castShadow = true
+      corniceMesh.receiveShadow = true
+      templeAssembly.add(corniceMesh)
+
+      const pedimentGeometry = createPedimentGeometry(29.6, 5.3, 1.05)
+      const westernPedimentMesh = new THREE.Mesh(pedimentGeometry, roofMarbleMaterial)
+      westernPedimentMesh.position.set(-35.3, 22.65, 0)
+      westernPedimentMesh.castShadow = true
+      westernPedimentMesh.receiveShadow = true
+      templeAssembly.add(westernPedimentMesh)
+
+      const easternPedimentMesh = new THREE.Mesh(pedimentGeometry, roofMarbleMaterial)
+      easternPedimentMesh.position.set(35.3, 22.65, 0)
+      easternPedimentMesh.rotation.y = Math.PI
+      easternPedimentMesh.castShadow = true
+      easternPedimentMesh.receiveShadow = true
+      templeAssembly.add(easternPedimentMesh)
+
+      const roofSlopeAngle = Math.atan(5.3 / 14.9)
+      const southRoofMesh = new THREE.Mesh(new THREE.BoxGeometry(72.4, 0.9, 17.1), roofMarbleMaterial)
+      southRoofMesh.position.set(0, 25.05, 8.55)
+      southRoofMesh.rotation.x = -roofSlopeAngle
+      southRoofMesh.castShadow = true
+      southRoofMesh.receiveShadow = true
+      templeAssembly.add(southRoofMesh)
+
+      const northRoofMesh = new THREE.Mesh(new THREE.BoxGeometry(72.4, 0.9, 17.1), roofMarbleMaterial)
+      northRoofMesh.position.set(0, 25.05, -8.55)
+      northRoofMesh.rotation.x = roofSlopeAngle
+      northRoofMesh.castShadow = true
+      northRoofMesh.receiveShadow = true
+      templeAssembly.add(northRoofMesh)
+
+      const ridgeMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 71.7, 12), roofMarbleMaterial)
+      ridgeMesh.rotation.z = Math.PI * 0.5
+      ridgeMesh.position.y = 27.95
+      ridgeMesh.castShadow = true
+      ridgeMesh.receiveShadow = true
+      templeAssembly.add(ridgeMesh)
+
+      const eastDoorMesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 7.2, 4.8), new THREE.MeshStandardMaterial({ color: 0x6f5c47, roughness: 0.92, metalness: 0 }))
+      eastDoorMesh.position.set(24.65, 7.2, 0)
+      eastDoorMesh.castShadow = true
+      templeAssembly.add(eastDoorMesh)
+
+      const innerShadowMesh = new THREE.Mesh(new THREE.BoxGeometry(41.5, 9.7, 13.5), new THREE.MeshStandardMaterial({ color: 0xc9b796, roughness: 0.95, metalness: 0 }))
+      innerShadowMesh.position.set(0.2, 7.5, 0)
+      innerShadowMesh.castShadow = false
+      innerShadowMesh.receiveShadow = true
+      templeAssembly.add(innerShadowMesh)
+
+      const stylobateSouthStepsMesh = new THREE.Mesh(new THREE.BoxGeometry(22, 0.35, 5.5), marbleMaterial)
+      stylobateSouthStepsMesh.position.set(8, 2.22, 18.2)
+      stylobateSouthStepsMesh.castShadow = true
+      stylobateSouthStepsMesh.receiveShadow = true
+      templeAssembly.add(stylobateSouthStepsMesh)
+
+      return templeAssembly
+    }
+
+    const parthenonMeshGroup = createTemple()
+    parthenonMeshGroup.position.set(4, 58.55, 0)
+    parthenonMeshGroup.rotation.y = -0.065
+    templeGroup.add(parthenonMeshGroup)
+
+    function createPathSlabs() {
+      const slabCount = 116
+      const pathSlabGeometry = new THREE.BoxGeometry(9.8, 0.34, 2.8)
+      const pathSlabMaterial = new THREE.MeshStandardMaterial({ color: 0xc7b39a, roughness: 0.96, metalness: 0.0 })
+      const pathSlabMesh = new THREE.InstancedMesh(pathSlabGeometry, pathSlabMaterial, slabCount)
+      pathSlabMesh.castShadow = true
+      pathSlabMesh.receiveShadow = true
+      pathSlabMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
+      pathGroup.add(pathSlabMesh)
+
+      for (let slabIndex = 0; slabIndex < slabCount; slabIndex += 1) {
+        const pathProgress = slabIndex / (slabCount - 1)
+        const slabPoint = ascentPathCurve.getPointAt(pathProgress)
+        const nextProgress = clampValue(pathProgress + 0.008, 0, 1)
+        const nextPoint = ascentPathCurve.getPointAt(nextProgress)
+        const slabTangent = nextPoint.clone().sub(slabPoint).normalize()
+        const slabElevation = sampleTerrainHeight(slabPoint.x, slabPoint.z)
+        const nextElevation = sampleTerrainHeight(nextPoint.x, nextPoint.z)
+        const slabPitch = Math.atan2(nextElevation - slabElevation, slabPoint.distanceTo(nextPoint))
+        const slabWidthScale = 1 + (1 - smoothstepValue(0, 0.3, pathProgress)) * 0.2
+        const slabDepthScale = 0.92 + Math.sin(pathProgress * Math.PI) * 0.16
+        const slabStepBoost = slabIndex % 5 === 0 ? 0.16 : 0
+        sharedTemporaryEuler.set(slabPitch * 0.72, Math.atan2(slabTangent.x, slabTangent.z), 0, 'YXZ')
+        sharedTemporaryQuaternion.setFromEuler(sharedTemporaryEuler)
+        sharedTemporaryScale.set(slabWidthScale, 1 + slabStepBoost, slabDepthScale)
+        sharedTemporaryMatrix.compose(
+          new THREE.Vector3(slabPoint.x, slabElevation + 0.18 + slabStepBoost * 0.15, slabPoint.z),
+          sharedTemporaryQuaternion,
+          sharedTemporaryScale
+        )
+        pathSlabMesh.setMatrixAt(slabIndex, sharedTemporaryMatrix)
+      }
+
+      pathSlabMesh.instanceMatrix.needsUpdate = true
+
+      const upperRampMesh = new THREE.Mesh(new THREE.BoxGeometry(26, 0.55, 9.5), new THREE.MeshStandardMaterial({ color: 0xb9a48d, roughness: 0.95, metalness: 0 }))
+      upperRampMesh.position.set(-6, 59.4, 12)
+      upperRampMesh.rotation.y = -0.25
+      upperRampMesh.castShadow = true
+      upperRampMesh.receiveShadow = true
+      pathGroup.add(upperRampMesh)
+    }
+
+    createPathSlabs()
+
+    function createBentOliveTrunkGeometry() {
+      const trunkGeometry = new THREE.CylinderGeometry(0.22, 0.34, 2.8, 8, 10, false)
+      const trunkPositionAttribute = trunkGeometry.attributes.position
+      for (let trunkVertexIndex = 0; trunkVertexIndex < trunkPositionAttribute.count; trunkVertexIndex += 1) {
+        const trunkVertexY = trunkPositionAttribute.getY(trunkVertexIndex)
+        const trunkHeightFactor = (trunkVertexY + 1.4) / 2.8
+        const trunkBendAmount = trunkHeightFactor * trunkHeightFactor * 0.28
+        const trunkTwistAmount = Math.sin(trunkHeightFactor * Math.PI) * 0.08
+        trunkPositionAttribute.setX(trunkVertexIndex, trunkPositionAttribute.getX(trunkVertexIndex) + trunkBendAmount)
+        trunkPositionAttribute.setZ(trunkVertexIndex, trunkPositionAttribute.getZ(trunkVertexIndex) + trunkTwistAmount)
+      }
+      trunkGeometry.computeVertexNormals()
+      return trunkGeometry
+    }
+
+    const oliveTreeData = []
+    const oliveTreeRandom = createSeededRandom(14027)
+    let oliveAttemptCount = 0
+    while (oliveTreeData.length < 118 && oliveAttemptCount < 5000) {
+      oliveAttemptCount += 1
+      const candidateRadius = 78 + oliveTreeRandom() * 150
+      const candidateAngle = oliveTreeRandom() * Math.PI * 2
+      const radialStretch = 0.72 + oliveTreeRandom() * 0.5
+      const candidateX = Math.cos(candidateAngle) * candidateRadius * radialStretch
+      const candidateZ = Math.sin(candidateAngle) * candidateRadius
+      const candidateHeight = sampleTerrainHeight(candidateX, candidateZ)
+      const candidatePathDistance = samplePolylineDistance(candidateX, candidateZ, ascentPolylinePoints)
+      const candidatePlateauDistance = Math.sqrt((candidateX / 64) ** 2 + ((candidateZ + 2) / 58) ** 2)
+      if (candidateHeight > 4 && candidateHeight < 50 && candidatePathDistance > 7 && candidatePlateauDistance > 1.02) {
+        oliveTreeData.push({
+          x: candidateX,
+          y: candidateHeight,
+          z: candidateZ,
+          scale: 0.78 + oliveTreeRandom() * 0.62,
+          rotation: oliveTreeRandom() * Math.PI * 2,
+          leanX: (oliveTreeRandom() - 0.5) * 0.08,
+          leanZ: (oliveTreeRandom() - 0.5) * 0.08,
+          hueDrift: oliveTreeRandom() * 0.08
+        })
+      }
+    }
+
+    function createOliveTrees() {
+      const trunkGeometry = createBentOliveTrunkGeometry()
+      const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x66513d, roughness: 0.95, metalness: 0 })
+      const canopyGeometry = new THREE.SphereGeometry(1, 10, 8)
+      const canopyMaterial = new THREE.MeshStandardMaterial({ color: 0x6e7d56, roughness: 0.92, metalness: 0 })
+      const canopyOffsets = [
+        new THREE.Vector3(-0.4, 2.2, 0),
+        new THREE.Vector3(0.55, 2.45, 0.1),
+        new THREE.Vector3(0.05, 2.85, -0.38),
+        new THREE.Vector3(0.12, 1.95, 0.35)
+      ]
+      const canopyScales = [
+        new THREE.Vector3(1.28, 0.82, 1.12),
+        new THREE.Vector3(1.18, 0.76, 1.02),
+        new THREE.Vector3(0.94, 0.66, 0.88),
+        new THREE.Vector3(1.06, 0.72, 0.94)
+      ]
+
+      const trunkMesh = new THREE.InstancedMesh(trunkGeometry, trunkMaterial, oliveTreeData.length)
+      const canopyMesh = new THREE.InstancedMesh(canopyGeometry, canopyMaterial, oliveTreeData.length * 4)
+      trunkMesh.castShadow = false
+      trunkMesh.receiveShadow = true
+      canopyMesh.castShadow = false
+      canopyMesh.receiveShadow = true
+      trunkMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
+      canopyMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
+      vegetationGroup.add(trunkMesh, canopyMesh)
+
+      let canopyInstanceIndex = 0
+      for (let oliveTreeIndex = 0; oliveTreeIndex < oliveTreeData.length; oliveTreeIndex += 1) {
+        const oliveTreeEntry = oliveTreeData[oliveTreeIndex]
+        sharedTemporaryEuler.set(oliveTreeEntry.leanX, oliveTreeEntry.rotation, oliveTreeEntry.leanZ, 'YXZ')
+        const oliveTreeQuaternion = new THREE.Quaternion().setFromEuler(sharedTemporaryEuler)
+        sharedTemporaryScale.set(oliveTreeEntry.scale, oliveTreeEntry.scale, oliveTreeEntry.scale)
+        sharedTemporaryMatrix.compose(
+          new THREE.Vector3(oliveTreeEntry.x, oliveTreeEntry.y + 1.3 * oliveTreeEntry.scale, oliveTreeEntry.z),
+          oliveTreeQuaternion,
+          sharedTemporaryScale
+        )
+        trunkMesh.setMatrixAt(oliveTreeIndex, sharedTemporaryMatrix)
+        sharedColorA.setHSL(0.09, 0.22, 0.29 + oliveTreeEntry.hueDrift * 0.05)
+        trunkMesh.setColorAt(oliveTreeIndex, sharedColorA)
+
+        for (let canopyLobeIndex = 0; canopyLobeIndex < canopyOffsets.length; canopyLobeIndex += 1) {
+          const canopyOffset = canopyOffsets[canopyLobeIndex].clone().multiplyScalar(oliveTreeEntry.scale).applyQuaternion(oliveTreeQuaternion)
+          const canopyPosition = new THREE.Vector3(oliveTreeEntry.x, oliveTreeEntry.y, oliveTreeEntry.z).add(canopyOffset)
+          const canopyRotationY = oliveTreeEntry.rotation + canopyLobeIndex * 0.73
+          sharedTemporaryEuler.set(oliveTreeEntry.leanX * 0.4, canopyRotationY, oliveTreeEntry.leanZ * 0.4, 'YXZ')
+          const canopyQuaternion = new THREE.Quaternion().setFromEuler(sharedTemporaryEuler)
+          sharedTemporaryScale.copy(canopyScales[canopyLobeIndex]).multiplyScalar(oliveTreeEntry.scale)
+          sharedTemporaryMatrix.compose(canopyPosition, canopyQuaternion, sharedTemporaryScale)
+          canopyMesh.setMatrixAt(canopyInstanceIndex, sharedTemporaryMatrix)
+          sharedColorB.setHSL(0.28 + oliveTreeEntry.hueDrift * 0.03, 0.18, 0.37 + canopyLobeIndex * 0.013)
+          canopyMesh.setColorAt(canopyInstanceIndex, sharedColorB)
+          canopyInstanceIndex += 1
+        }
+      }
+
+      trunkMesh.instanceMatrix.needsUpdate = true
+      canopyMesh.instanceMatrix.needsUpdate = true
+      if (trunkMesh.instanceColor) {
+        trunkMesh.instanceColor.needsUpdate = true
+      }
+      if (canopyMesh.instanceColor) {
+        canopyMesh.instanceColor.needsUpdate = true
+      }
+    }
+
+    createOliveTrees()
+
+    const cityRandom = createSeededRandom(26003)
+    const cityBlockCount = 680
+    const cityBlockMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xbeb9b1, roughness: 1, metalness: 0 }), cityBlockCount)
+    cityBlockMesh.castShadow = false
+    cityBlockMesh.receiveShadow = true
+    cityBlockMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage)
+    cityGroup.add(cityBlockMesh)
+
+    let cityPlacedCount = 0
+    while (cityPlacedCount < cityBlockCount) {
+      const cityRadius = 125 + cityRandom() * 190
+      const cityAngle = cityRandom() * Math.PI * 2
+      const cityX = Math.cos(cityAngle) * cityRadius * (0.8 + cityRandom() * 0.6)
+      const cityZ = Math.sin(cityAngle) * cityRadius
+      const cityHeightBase = sampleTerrainHeight(cityX, cityZ)
+      const hillExclusionDistance = Math.sqrt(cityX * cityX + cityZ * cityZ)
+      if (hillExclusionDistance > 92 && cityHeightBase < 22) {
+        const cityWidth = 3.2 + cityRandom() * 8.8
+        const cityDepth = 3.2 + cityRandom() * 8.2
+        const cityHeight = 1.6 + cityRandom() * cityRandom() * 15
+        sharedTemporaryEuler.set(0, cityRandom() * Math.PI, 0)
+        sharedTemporaryQuaternion.setFromEuler(sharedTemporaryEuler)
+        sharedTemporaryScale.set(cityWidth, cityHeight, cityDepth)
+        sharedTemporaryMatrix.compose(
+          new THREE.Vector3(cityX, cityHeightBase + cityHeight * 0.5, cityZ),
+          sharedTemporaryQuaternion,
+          sharedTemporaryScale
+        )
+        cityBlockMesh.setMatrixAt(cityPlacedCount, sharedTemporaryMatrix)
+        sharedColorC.setHSL(0.08, 0.06, 0.62 + cityRandom() * 0.08)
+        cityBlockMesh.setColorAt(cityPlacedCount, sharedColorC)
+        cityPlacedCount += 1
+      }
+    }
+
+    cityBlockMesh.instanceMatrix.needsUpdate = true
+    if (cityBlockMesh.instanceColor) {
+      cityBlockMesh.instanceColor.needsUpdate = true
+    }
+
+    const crowdSpotRandom = createSeededRandom(40117)
+    const crowdSpotData = []
+    const crowdColorPalette = [0xe8ded0, 0xdabf92, 0xc8b7d9, 0xd6c0a7, 0xb0bfd4, 0xd7a38c]
+
+    for (let pathCrowdIndex = 0; pathCrowdIndex < 96; pathCrowdIndex += 1) {
+      const crowdProgress = 0.1 + crowdSpotRandom() * 0.84
+      const curvePoint = ascentPathCurve.getPointAt(crowdProgress)
+      const tangentPoint = ascentPathCurve.getTangentAt(crowdProgress)
+      const tangentPerpendicular = new THREE.Vector3(-tangentPoint.z, 0, tangentPoint.x).normalize()
+      const lateralOffset = (crowdSpotRandom() - 0.5) * 7.2
+      const crowdX = curvePoint.x + tangentPerpendicular.x * lateralOffset
+      const crowdZ = curvePoint.z + tangentPerpendicular.z * lateralOffset
+      const crowdY = sampleTerrainHeight(crowdX, crowdZ)
+      crowdSpotData.push({
+        x: crowdX,
+        y: crowdY,
+        z: crowdZ,
+        rotation: Math.atan2(tangentPoint.x, tangentPoint.z) + (crowdSpotRandom() - 0.5) * 0.8,
+        scale: 0.86 + crowdSpotRandom() * 0.34,
+        color: crowdColorPalette[Math.floor(crowdSpotRandom() * crowdColorPalette.length)]
+      })
+    }
+
+    for (let terraceCrowdIndex = 0; terraceCrowdIndex < 48; terraceCrowdIndex += 1) {
+      const terraceRadius = 10 + crowdSpotRandom() * 31
+      const terraceAngle = crowdSpotRandom() * Math.PI * 2
+      const terraceX = Math.cos(terraceAngle) * terraceRadius
+      const terraceZ = Math.sin(terraceAngle) * (8 + crowdSpotRandom() * 22)
+      const terraceWorldX = terraceX + 4
+      const terraceWorldZ = terraceZ
+      const terraceWorldY = sampleTerrainHeight(terraceWorldX, terraceWorldZ) + (terraceRadius < 24 ? 2.7 : 1.2)
+      if (Math.abs(terraceWorldZ) > 6 || terraceWorldX < -15 || terraceWorldX > 18) {
+        crowdSpotData.push({
+          x: terraceWorldX,
+          y: terraceWorldY,
+          z: terraceWorldZ,
+          rotation: crowdSpotRandom() * Math.PI * 2,
+          scale: 0.84 + crowdSpotRandom() * 0.33,
+          color: crowdColorPalette[Math.floor(crowdSpotRandom() * crowdColorPalette.length)]
+        })
+      }
+    }
+
+    const crowdBodyGeometry = new THREE.CylinderGeometry(0.14, 0.28, 1.08, 8, 1)
+    const crowdHeadGeometry = new THREE.SphereGeometry(0.16, 8, 6)
+    const crowdBodyMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.96, metalness: 0 })
+    const crowdHeadMaterial = new THREE.MeshStandardMaterial({ color: 0xcdad8a, roughness: 0.9, metalness: 0 })
+
+    const crowdBodyMesh = new THREE.InstancedMesh(crowdBodyGeometry, crowdBodyMaterial, crowdSpotData.length)
+    const crowdHeadMesh = new THREE.InstancedMesh(crowdHeadGeometry, crowdHeadMaterial, crowdSpotData.length)
+    crowdBodyMesh.castShadow = false
+    crowdBodyMesh.receiveShadow = true
+    crowdHeadMesh.castShadow = false
+    crowdHeadMesh.receiveShadow = true
+    crowdGroup.add(crowdBodyMesh, crowdHeadMesh)
+
+    for (let crowdInstanceIndex = 0; crowdInstanceIndex < crowdSpotData.length; crowdInstanceIndex += 1) {
+      const crowdEntry = crowdSpotData[crowdInstanceIndex]
+      sharedTemporaryEuler.set(0, crowdEntry.rotation, 0)
+      sharedTemporaryQuaternion.setFromEuler(sharedTemporaryEuler)
+      sharedTemporaryScale.set(crowdEntry.scale, crowdEntry.scale, crowdEntry.scale)
+      sharedTemporaryMatrix.compose(
+        new THREE.Vector3(crowdEntry.x, crowdEntry.y + 0.54 * crowdEntry.scale, crowdEntry.z),
+        sharedTemporaryQuaternion,
+        sharedTemporaryScale
+      )
+      crowdBodyMesh.setMatrixAt(crowdInstanceIndex, sharedTemporaryMatrix)
+      crowdBodyMesh.setColorAt(crowdInstanceIndex, new THREE.Color(crowdEntry.color))
+
+      sharedTemporaryMatrix.compose(
+        new THREE.Vector3(crowdEntry.x, crowdEntry.y + 1.26 * crowdEntry.scale, crowdEntry.z),
+        new THREE.Quaternion(),
+        new THREE.Vector3(crowdEntry.scale, crowdEntry.scale, crowdEntry.scale)
+      )
+      crowdHeadMesh.setMatrixAt(crowdInstanceIndex, sharedTemporaryMatrix)
+    }
+
+    crowdBodyMesh.instanceMatrix.needsUpdate = true
+    crowdHeadMesh.instanceMatrix.needsUpdate = true
+    if (crowdBodyMesh.instanceColor) {
+      crowdBodyMesh.instanceColor.needsUpdate = true
+    }
+
+    function updateCrowdVisibility() {
+      const crowdEnabled = crowdCheckboxElement.checked
+      const densityValue = Number(crowdDensitySliderElement.value)
+      const visibleCrowdCount = crowdEnabled ? Math.max(0, Math.round(crowdSpotData.length * densityValue)) : 0
+      crowdBodyMesh.count = visibleCrowdCount
+      crowdHeadMesh.count = visibleCrowdCount
+      crowdDensitySliderElement.disabled = !crowdEnabled
+      crowdDensityValueElement.textContent = `${Math.round(densityValue * 100)}%`
+      crowdStateValueElement.textContent = crowdEnabled ? 'On' : 'Off'
+    }
+
+    const postcardCameraPosition = new THREE.Vector3(-158, 92, 176)
+    const postcardCameraTarget = new THREE.Vector3(2, 61, 4)
+    const inspectionCameraPosition = new THREE.Vector3(52, 71, 58)
+    const inspectionCameraTarget = new THREE.Vector3(10, 70, 2)
+    const desiredCameraPosition = postcardCameraPosition.clone()
+    const desiredCameraTarget = postcardCameraTarget.clone()
+    const transitionStartPosition = mainCamera.position.clone()
+    const transitionStartTarget = orbitController.target.clone()
+    let presetTransitionProgress = 1
+    let activeCameraMode = 'postcard'
+
+    const flyoverCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-186, 86, 222),
+      new THREE.Vector3(-136, 102, 132),
+      new THREE.Vector3(-52, 94, 68),
+      new THREE.Vector3(74, 82, 132),
+      new THREE.Vector3(152, 104, 48),
+      new THREE.Vector3(84, 130, -82),
+      new THREE.Vector3(-64, 108, -58),
+      new THREE.Vector3(-186, 86, 222)
+    ], true, 'centripetal')
+
+    function startCameraTransition(cameraModeName) {
+      const previousCameraMode = activeCameraMode
+      activeCameraMode = cameraModeName
+      cameraValueElement.textContent = cameraModeName === 'flyover' ? 'Path' : 'View'
+      transitionStartPosition.copy(mainCamera.position)
+      if (previousCameraMode === 'flyover') {
+        transitionStartTarget.set(4, 68, 0)
+        orbitController.target.copy(transitionStartTarget)
+      } else {
+        transitionStartTarget.copy(orbitController.target)
+      }
+      presetTransitionProgress = 0
+
+      if (cameraModeName === 'postcard') {
+        desiredCameraPosition.copy(postcardCameraPosition)
+        desiredCameraTarget.copy(postcardCameraTarget)
+        orbitController.enabled = true
+      } else if (cameraModeName === 'inspection') {
+        desiredCameraPosition.copy(inspectionCameraPosition)
+        desiredCameraTarget.copy(inspectionCameraTarget)
+        orbitController.enabled = true
+      } else {
+        orbitController.enabled = false
+      }
+    }
+
+    function evaluateTimePalette(timeValue) {
+      const morningPosition = new THREE.Vector3(148, 74, 88)
+      const noonPosition = new THREE.Vector3(42, 178, 24)
+      const eveningPosition = new THREE.Vector3(-146, 68, 92)
+      const resolvedSunPosition = new THREE.Vector3()
+      const resolvedSunColor = new THREE.Color()
+      const resolvedSkyTopColor = new THREE.Color()
+      const resolvedSkyHorizonColor = new THREE.Color()
+      const resolvedFogColor = new THREE.Color()
+      const resolvedGroundColor = new THREE.Color()
+
+      if (timeValue <= 0.5) {
+        const morningBlend = timeValue / 0.5
+        resolvedSunPosition.lerpVectors(morningPosition, noonPosition, morningBlend)
+        resolvedSunColor.lerpColors(new THREE.Color(0xffd0a1), new THREE.Color(0xfff6e3), morningBlend)
+        resolvedSkyTopColor.lerpColors(new THREE.Color(0x6ea7ee), new THREE.Color(0x72b0ff), morningBlend)
+        resolvedSkyHorizonColor.lerpColors(new THREE.Color(0xf1d8b6), new THREE.Color(0xd7e8ff), morningBlend)
+        resolvedFogColor.lerpColors(new THREE.Color(0xd8c4ac), new THREE.Color(0xb9cfe8), morningBlend)
+        resolvedGroundColor.lerpColors(new THREE.Color(0xf0d6b7), new THREE.Color(0xf4e6d0), morningBlend)
+        return {
+          sunPosition: resolvedSunPosition,
+          sunColor: resolvedSunColor,
+          skyTopColor: resolvedSkyTopColor,
+          skyHorizonColor: resolvedSkyHorizonColor,
+          fogColor: resolvedFogColor,
+          groundColor: resolvedGroundColor,
+          sunIntensity: THREE.MathUtils.lerp(2.2, 2.9, morningBlend),
+          hemisphereIntensity: THREE.MathUtils.lerp(1.42, 1.68, morningBlend),
+          fillIntensity: THREE.MathUtils.lerp(0.2, 0.27, morningBlend),
+          exposure: THREE.MathUtils.lerp(1.02, 1.1, morningBlend),
+          shadowRadius: THREE.MathUtils.lerp(2.3, 1.1, morningBlend),
+          stageLabel: morningBlend < 0.62 ? 'Morning' : 'High noon'
+        }
+      }
+
+      const eveningBlend = (timeValue - 0.5) / 0.5
+      resolvedSunPosition.lerpVectors(noonPosition, eveningPosition, eveningBlend)
+      resolvedSunColor.lerpColors(new THREE.Color(0xfff6e3), new THREE.Color(0xffc184), eveningBlend)
+      resolvedSkyTopColor.lerpColors(new THREE.Color(0x72b0ff), new THREE.Color(0x5f93d5), eveningBlend)
+      resolvedSkyHorizonColor.lerpColors(new THREE.Color(0xd7e8ff), new THREE.Color(0xf2c596), eveningBlend)
+      resolvedFogColor.lerpColors(new THREE.Color(0xb9cfe8), new THREE.Color(0xe0b891), eveningBlend)
+      resolvedGroundColor.lerpColors(new THREE.Color(0xf4e6d0), new THREE.Color(0xf1cfaa), eveningBlend)
+      return {
+        sunPosition: resolvedSunPosition,
+        sunColor: resolvedSunColor,
+        skyTopColor: resolvedSkyTopColor,
+        skyHorizonColor: resolvedSkyHorizonColor,
+        fogColor: resolvedFogColor,
+        groundColor: resolvedGroundColor,
+        sunIntensity: THREE.MathUtils.lerp(2.9, 2.35, eveningBlend),
+        hemisphereIntensity: THREE.MathUtils.lerp(1.68, 1.3, eveningBlend),
+        fillIntensity: THREE.MathUtils.lerp(0.27, 0.18, eveningBlend),
+        exposure: THREE.MathUtils.lerp(1.1, 1.06, eveningBlend),
+        shadowRadius: THREE.MathUtils.lerp(1.1, 2.5, eveningBlend),
+        stageLabel: eveningBlend < 0.38 ? 'High noon' : 'Golden hour'
+      }
+    }
+
+    function applyAtmosphereFromUi() {
+      const timeValue = Number(timeSliderElement.value)
+      const hazeValue = Number(hazeSliderElement.value)
+      const paletteData = evaluateTimePalette(timeValue)
+      timeValueElement.textContent = paletteData.stageLabel
+      hazeValueElement.textContent = `${Math.round(hazeValue * 100)}%`
+
+      sunLight.position.copy(paletteData.sunPosition)
+      sunLight.color.copy(paletteData.sunColor)
+      sunLight.intensity = paletteData.sunIntensity
+      sunLight.shadow.radius = paletteData.shadowRadius
+      fillLight.intensity = paletteData.fillIntensity
+      hemisphereLight.intensity = paletteData.hemisphereIntensity
+      hemisphereLight.color.copy(paletteData.skyTopColor)
+      hemisphereLight.groundColor.copy(paletteData.groundColor)
+      viewportRenderer.toneMappingExposure = paletteData.exposure
+
+      const fogNearDistance = THREE.MathUtils.lerp(210, 115, hazeValue)
+      const fogFarDistance = THREE.MathUtils.lerp(520, 240, hazeValue)
+      acropolisScene.fog.near = fogNearDistance
+      acropolisScene.fog.far = fogFarDistance
+      acropolisScene.fog.color.copy(paletteData.fogColor)
+      acropolisScene.background.copy(paletteData.fogColor)
+
+      skyUniforms.topColor.value.copy(paletteData.skyTopColor)
+      skyUniforms.horizonColor.value.lerpColors(paletteData.skyHorizonColor, paletteData.fogColor, hazeValue * 0.25)
+      skyUniforms.groundColor.value.copy(paletteData.groundColor)
+    }
+
+    timeSliderElement.addEventListener('input', applyAtmosphereFromUi)
+    hazeSliderElement.addEventListener('input', applyAtmosphereFromUi)
+    crowdCheckboxElement.addEventListener('input', updateCrowdVisibility)
+    crowdDensitySliderElement.addEventListener('input', updateCrowdVisibility)
+    cameraSelectElement.addEventListener('change', function handleCameraSelection() {
+      startCameraTransition(cameraSelectElement.value)
+    })
+
+    function handleResize() {
+      mainCamera.aspect = window.innerWidth / window.innerHeight
+      mainCamera.updateProjectionMatrix()
+      viewportRenderer.setSize(window.innerWidth, window.innerHeight)
+      viewportRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    }
+
+    window.addEventListener('resize', handleResize)
+
+    const renderClock = new THREE.Clock()
+    const fpsSamples = []
+    let fpsAccumulatedTime = 0
+
+    function updatePostcardOrInspection(deltaTime) {
+      if (presetTransitionProgress < 1) {
+        presetTransitionProgress = Math.min(1, presetTransitionProgress + deltaTime * 0.75)
+        const easedProgress = 1 - Math.pow(1 - presetTransitionProgress, 3)
+        mainCamera.position.lerpVectors(transitionStartPosition, desiredCameraPosition, easedProgress)
+        orbitController.target.lerpVectors(transitionStartTarget, desiredCameraTarget, easedProgress)
+      }
+      orbitController.update()
+    }
+
+    function updateFlyover(elapsedTime) {
+      const flyoverProgress = (elapsedTime * 0.025) % 1
+      const lookAheadProgress = (flyoverProgress + 0.026) % 1
+      const flyoverPosition = flyoverCurve.getPointAt(flyoverProgress)
+      const flyoverLookAheadPoint = flyoverCurve.getPointAt(lookAheadProgress)
+      const templeFocusPoint = new THREE.Vector3(4, 68, 0)
+      const resolvedLookPoint = flyoverLookAheadPoint.lerp(templeFocusPoint, 0.62)
+      mainCamera.position.copy(flyoverPosition)
+      mainCamera.lookAt(resolvedLookPoint)
+    }
+
+    function updateFpsCounter(deltaTime) {
+      fpsAccumulatedTime += deltaTime
+      fpsSamples.push(1 / Math.max(deltaTime, 0.0001))
+      if (fpsSamples.length > 24) {
+        fpsSamples.shift()
+      }
+      if (fpsAccumulatedTime >= 0.35) {
+        const fpsAverage = fpsSamples.reduce(function accumulateSample(previousTotal, currentSample) {
+          return previousTotal + currentSample
+        }, 0) / fpsSamples.length
+        fpsBadgeElement.textContent = `FPS ${Math.round(fpsAverage)}`
+        fpsAccumulatedTime = 0
+      }
+    }
+
+    applyAtmosphereFromUi()
+    updateCrowdVisibility()
+    startCameraTransition('postcard')
+
+    function animateScene() {
+      requestAnimationFrame(animateScene)
+      const deltaTime = renderClock.getDelta()
+      const elapsedTime = renderClock.elapsedTime
+
+      if (activeCameraMode === 'flyover') {
+        updateFlyover(elapsedTime)
+      } else {
+        updatePostcardOrInspection(deltaTime)
+      }
+
+      updateFpsCounter(deltaTime)
+      viewportRenderer.render(acropolisScene, mainCamera)
+    }
+
+    animateScene()
+  </script>
+</body>
+</html>
